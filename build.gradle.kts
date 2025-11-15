@@ -165,6 +165,7 @@ dependencies {
 
     // Compose
     api(platform(libs.compose.bom))
+    androidTestImplementation(platform(libs.compose.bom))
     implementation(libs.compose.runtime)
     implementation(libs.compose.ui)
     implementation(libs.compose.ui.tooling)
@@ -182,6 +183,7 @@ dependencies {
 
     // Testing
     androidTestImplementation(libs.test.runner)
+    androidTestImplementation(libs.documentfile)
     implementation(libs.test.rules)
     implementation(libs.test.ext)
 
@@ -189,6 +191,7 @@ dependencies {
     // Test rules and transitive dependencies:
     androidTestImplementation(libs.compose.ui.test)
     androidTestImplementation(libs.compose.ui.test.junit4)
+    androidTestImplementation(libs.compose.material.icons.extended)
     // Needed for createComposeRule, but not createAndroidComposeRule:
     debugImplementation(libs.compose.ui.test.manifest)
     //---------------------------------------- hg42

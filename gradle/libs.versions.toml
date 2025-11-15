@@ -5,6 +5,7 @@ biometric = "1.2.0-alpha05"
 coil = "2.7.0"
 commons-compress = "1.28.0"
 commons-io = "2.20.0"
+documentfile = "1.1.0"
 compose-bom = "2025.10.00"
 compose-accompanist = "0.37.3"
 compose-markdown = "0.5.7"
@@ -43,6 +44,7 @@ preference = { module = "androidx.preference:preference-ktx", version.ref = "pre
 activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity" }
 collections-immutable = { module = "org.jetbrains.kotlinx:kotlinx-collections-immutable", version.ref = "immutables" }
 datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
+documentfile = { module = "androidx.documentfile:documentfile", version.ref = "documentfile" }
 
 work-runtime = { module = "androidx.work:work-runtime", version.ref = "work" }
 biometric = { module = "androidx.biometric:biometric", version.ref = "biometric" }
@@ -84,6 +86,7 @@ compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview"
 compose-ui-test = { module = "androidx.compose.ui:ui-test" }
 compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4"}
 compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
+compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
 compose-foundation = { module = "androidx.compose.foundation:foundation" }
 compose-material3 = { module = "androidx.compose.material3:material3" }
 compose-material3-navigationsuite = { module = "androidx.compose.material3:material3-adaptive-navigation-suite" }
