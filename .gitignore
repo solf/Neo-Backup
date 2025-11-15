@@ -1,3 +1,8 @@
+# Exclude basic Eclipse files.
+**/.project
+**/.classpath
+**/.settings/
+
 *.iml
 *.pyc
 *.swp
