@@ -83,9 +83,9 @@ object BackupRestoreHelper {
         // create the new backup
         val result = action.run(packageItem, reBackupMode)
 
-        if (result.succeeded) {
+        if (result.succeeded)
             Timber.i("<${packageItem.packageName}> Backup succeeded: ${result.succeeded}")
-        } else {
+        else {
             Timber.i("<${packageItem.packageName}> Backup FAILED: ${result.succeeded} ${result.message}")
         }
 

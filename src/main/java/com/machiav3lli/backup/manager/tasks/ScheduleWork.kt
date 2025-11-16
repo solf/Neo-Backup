@@ -291,7 +291,13 @@ class ScheduleWork(
                                 }
 
                                 else                                   -> {
-                                    // No-op: work still in progress
+                                    if (finished >= queued) {
+                                        finishSignal.update { true }
+                                        endSchedule(name, "all jobs finished")
+                                        selectedItems.fastForEach {
+                                            packageRepo.updatePackage(it)
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -337,7 +343,7 @@ class ScheduleWork(
 
                 val unfilteredPackages = context.getInstalledPackageList()
 
-                val filteredPackages = filterPackages(
+                filterPackages(
                     packages = unfilteredPackages,
                     tagsMap = tagsMap,
                     filter = schedule.filter,
@@ -345,9 +351,7 @@ class ScheduleWork(
                     customList = schedule.customList,
                     blockList = blockList,
                     tagsList = tagsList,
-                )
-
-                filteredPackages.map { it.packageName }
+                ).map { it.packageName }
 
             } catch (e: FileUtils.BackupLocationInAccessibleException) {
                 Timber.e("Schedule failed: ${e.message}")
