@@ -17,6 +17,7 @@
  */
 package com.machiav3lli.backup.manager.handler
 
+import android.text.format.Formatter
 import com.machiav3lli.backup.NeoApp
 import com.machiav3lli.backup.data.entity.StorageFile
 import com.machiav3lli.backup.utils.BACKUP_DATE_TIME_FORMATTER
@@ -86,12 +87,8 @@ class ScheduleLogHandler {
         }
 
         private fun formatSize(bytes: Long): String {
-            return when {
-                bytes < 1024 -> "${bytes}B"
-                bytes < 1024 * 1024 -> String.format("%.1fKB", bytes / 1024.0)
-                bytes < 1024 * 1024 * 1024 -> String.format("%.1fMB", bytes / (1024.0 * 1024))
-                else -> String.format("%.2fGB", bytes / (1024.0 * 1024 * 1024))
-            }
+            // Use Android's Formatter to match UI formatting (base 1000 / SI units)
+            return Formatter.formatFileSize(NeoApp.context, bytes)
         }
 
         private fun StorageFile.appendText(text: String) {
