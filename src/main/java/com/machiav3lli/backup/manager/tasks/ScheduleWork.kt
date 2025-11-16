@@ -188,7 +188,8 @@ class ScheduleWork(
                     backupBoolean = true,
                     notificationId = notificationId,
                     batchName = batchName,
-                    immediate = false
+                    immediate = false,
+                    backupModifiedOnly = schedule.backupModifiedOnly
                 )
                 worksList.add(oneTimeWorkRequest)
 
@@ -308,47 +309,7 @@ class ScheduleWork(
                     tagsList = tagsList,
                 )
 
-                // Apply "modified only" filter if enabled and log decisions
-                val finalPackages = if (schedule.backupModifiedOnly) {
-                    filteredPackages.mapNotNull { pkg ->
-                        if (pkg.hasDataChangedSinceLastBackup) {
-                            // Determine reason for backup
-                            val reason = when {
-                                pkg.latestBackup == null -> "no_previous_backup"
-                                pkg.latestBackup!!.versionCode != pkg.versionCode -> 
-                                    "version_changed(${pkg.latestBackup!!.versionCode}→${pkg.versionCode})"
-                                else -> "data_modified"
-                            }
-                            ScheduleLogHandler.writeAppDecision(
-                                pkg.packageName,
-                                pkg.packageLabel,
-                                "BACKUP",
-                                reason
-                            )
-                            pkg
-                        } else {
-                            ScheduleLogHandler.writeAppDecision(
-                                pkg.packageName,
-                                pkg.packageLabel,
-                                "SKIP",
-                                "no_changes"
-                            )
-                            null
-                        }
-                    }
-                } else {
-                    // If not using modified-only filter, backup all filtered packages
-                    filteredPackages.onEach { pkg ->
-                        ScheduleLogHandler.writeAppDecision(
-                            pkg.packageName,
-                            pkg.packageLabel,
-                            "BACKUP",
-                            "scheduled_backup"
-                        )
-                    }
-                }
-
-                finalPackages.map { it.packageName }
+                filteredPackages.map { it.packageName }
 
             } catch (e: FileUtils.BackupLocationInAccessibleException) {
                 Timber.e("Schedule failed: ${e.message}")

@@ -52,8 +52,23 @@ object BackupRestoreHelper {
         work: AppActionWork?,
         shell: ShellHandler,
         packageItem: Package,
-        backupMode: Int
+        backupMode: Int,
+        backupModifiedOnly: Boolean = false
     ): ActionResult {
+        // Check if "modified only" filter is enabled and skip if not modified
+        if (backupModifiedOnly && !packageItem.hasDataChangedSinceLastBackup) {
+            val reason = "no_changes"
+            ScheduleLogHandler.writeAppDecision(
+                packageItem.packageName,
+                packageItem.packageLabel,
+                "SKIP",
+                reason,
+                sizeBytes = 0L
+            )
+            Timber.i("<${packageItem.packageName}> Skipped: no changes detected")
+            return ActionResult(packageItem, null, "Skipped (no changes)", true)
+        }
+
         var reBackupMode = backupMode
 
         // Select and prepare the action to use
@@ -76,9 +91,29 @@ object BackupRestoreHelper {
         // create the new backup
         val result = action.run(packageItem, reBackupMode)
 
-        if (result.succeeded)
+        if (result.succeeded) {
             Timber.i("<${packageItem.packageName}> Backup succeeded: ${result.succeeded}")
-        else {
+            
+            // Log successful backup with size
+            val reason = if (backupModifiedOnly) {
+                when {
+                    packageItem.latestBackup == null -> "no_previous_backup"
+                    result.backup?.versionCode != packageItem.versionCode -> 
+                        "version_changed(${packageItem.latestBackup?.versionCode}→${result.backup?.versionCode})"
+                    else -> "data_modified"
+                }
+            } else {
+                "scheduled_backup"
+            }
+            
+            ScheduleLogHandler.writeAppDecision(
+                packageItem.packageName,
+                packageItem.packageLabel,
+                "BACKUP",
+                reason,
+                sizeBytes = result.backup?.size ?: 0L
+            )
+        } else {
             Timber.i("<${packageItem.packageName}> Backup FAILED: ${result.succeeded} ${result.message}")
         }
 

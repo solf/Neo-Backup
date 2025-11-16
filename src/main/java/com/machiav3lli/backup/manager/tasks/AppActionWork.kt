@@ -70,6 +70,7 @@ class AppActionWork(val context: Context, workerParams: WorkerParameters) :
     private var backupIndex: Int = inputData.getInt("backupIndex", 0)
     private var notificationId: Int = inputData.getInt("notificationId", 123454321)
     private var failures = getVar(batchName, packageName, "failures")?.toInt() ?: 0
+    private var backupModifiedOnly = inputData.getBoolean("backupModifiedOnly", false)
 
     init {
         setOperation("")
@@ -129,7 +130,7 @@ class AppActionWork(val context: Context, workerParams: WorkerParameters) :
                                 actionResult = when {
                                     backupBoolean -> {
                                         BackupRestoreHelper.backup(
-                                            context, work, shellHandler, pi, selectedMode
+                                            context, work, shellHandler, pi, selectedMode, backupModifiedOnly
                                         )
                                     }
 
@@ -211,7 +212,8 @@ class AppActionWork(val context: Context, workerParams: WorkerParameters) :
                 "error" to result.message,
                 "succeeded" to result.succeeded,
                 "packageLabel" to packageLabel,
-                "failures" to failures
+                "failures" to failures,
+                "backupSize" to (result.backup?.size ?: 0L)
             )
     }
 
@@ -300,6 +302,7 @@ class AppActionWork(val context: Context, workerParams: WorkerParameters) :
             notificationId: Int,
             batchName: String,
             immediate: Boolean,
+            backupModifiedOnly: Boolean = false,
         ): OneTimeWorkRequest {
             val builder = OneTimeWorkRequest.Builder(AppActionWork::class.java)
 
@@ -315,7 +318,8 @@ class AppActionWork(val context: Context, workerParams: WorkerParameters) :
                         "notificationId" to notificationId,
                         "batchName" to batchName,
                         "operation" to "",
-                        "immediate" to immediate
+                        "immediate" to immediate,
+                        "backupModifiedOnly" to backupModifiedOnly
                     )
                 )
 
