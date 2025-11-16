@@ -243,6 +243,11 @@ class WorkHandler(
             var succeeded: Int = 0,
             var failed: Int = 0,
             var canceled: Int = 0,
+            
+            // Backup statistics
+            var backedUpCount: Int = 0,
+            var skippedCount: Int = 0,
+            var totalSize: Long = 0L,
         )
 
         class BatchState(
@@ -329,6 +334,18 @@ class WorkHandler(
                             succeeded++
                             workFinished++
                             packageName?.let { packagesState.put(it, "OK ") }
+                            
+                            // Track backup statistics
+                            if (backupBoolean) {
+                                val backupSize = data.getLong("backupSize", 0L)
+                                val error = data.getString("error") ?: ""
+                                if (backupSize > 0) {
+                                    backedUpCount++
+                                    totalSize += backupSize
+                                } else if (error.contains("Skipped")) {
+                                    skippedCount++
+                                }
+                            }
                         }
 
                         WorkInfo.State.FAILED    -> {
@@ -424,6 +441,12 @@ class WorkHandler(
                                 bigText += ", $canceled cancelled"
                             if (retries > 0)
                                 bigText += ", $retries retried"
+                            
+                            // Add backup statistics if available
+                            if (backedUpCount > 0 || skippedCount > 0) {
+                                val sizeFormatted = android.text.format.Formatter.formatFileSize(appContext, totalSize)
+                                bigText += "\nBacked up: $backedUpCount, Skipped: $skippedCount, Total: $sizeFormatted"
+                            }
                         }
 
                         if (retries > 0)

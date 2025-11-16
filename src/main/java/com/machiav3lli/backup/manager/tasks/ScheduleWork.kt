@@ -153,17 +153,6 @@ class ScheduleWork(
                 totalSize += stats.totalSize
             }
 
-            // Show completion notification with accumulated statistics
-            val totalSizeFormatted = android.text.format.Formatter.formatFileSize(context, totalSize)
-            showNotification(
-                context,
-                NeoActivity::class.java,
-                notificationId,
-                context.getString(R.string.sched_notificationMessage) + ": $name",
-                "Backed up: $totalBackedUp, Skipped: $totalSkipped, Total: $totalSizeFormatted",
-                false
-            )
-
             NeoApp.wakelock(false)
 
             Result.success()
