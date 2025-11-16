@@ -406,6 +406,12 @@ data class Package private constructor(val packageName: String) {
     val hasDataChangedSinceLastBackup: Boolean
         get() {
             val lastBackup = latestBackup ?: return true // No backup = treat as changed
+            
+            // Note: backupDate is stored as LocalDateTime (timezone-agnostic) and interpreted
+            // in the current system timezone. This could cause minor inaccuracies if the device
+            // timezone changes between backup creation and this check (e.g., travel, DST change).
+            // However, with typical daily backup frequency (~24h), timezone shifts (max ~12h)
+            // are unlikely to cause false negatives. Worst case: unnecessary re-backup.
             val lastBackupTimeMillis = lastBackup.backupDate.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
             
             // Check version code first (quick check - catches both upgrades and downgrades)
