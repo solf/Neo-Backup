@@ -225,16 +225,42 @@ class ScheduleWork(
                                         workInfo.outputData.getBoolean("succeeded", false)
                                     val packageLabel =
                                         workInfo.outputData.getString("packageLabel") ?: ""
+                                    val packageName = 
+                                        workInfo.outputData.getString("packageName") ?: ""
                                     val error = workInfo.outputData.getString("error") ?: ""
                                     val backupSize = workInfo.outputData.getLong("backupSize", 0L)
                                     
-                                    // Track backed up vs skipped
+                                    // Track backed up vs skipped and log to schedule log
                                     if (succeeded) {
                                         if (backupSize > 0) {
                                             totalBackupSize += backupSize
                                             backedUpCount++
+                                            
+                                            // Use simple reason based on schedule settings
+                                            val reason = if (schedule.backupModifiedOnly) {
+                                                "modified_data"
+                                            } else {
+                                                "scheduled_backup"
+                                            }
+                                            
+                                            ScheduleLogHandler.writeAppDecision(
+                                                packageName,
+                                                packageLabel,
+                                                "BACKUP",
+                                                reason,
+                                                sizeBytes = backupSize
+                                            )
                                         } else if (error.contains("Skipped")) {
                                             skippedCount++
+                                            
+                                            // Log skipped app
+                                            ScheduleLogHandler.writeAppDecision(
+                                                packageName,
+                                                packageLabel,
+                                                "SKIP",
+                                                "no_changes",
+                                                sizeBytes = 0L
+                                            )
                                         }
                                     }
 
@@ -265,20 +291,7 @@ class ScheduleWork(
                                 }
 
                                 else                                   -> {
-                                    if (finished >= queued) {
-                                        finishSignal.update { true }
-                                        endSchedule(name, "all jobs finished")
-                                        selectedItems.fastForEach {
-                                            packageRepo.updatePackage(it)
-                                        }
-                                        // Log completion with actual statistics
-                                        ScheduleLogHandler.writeScheduleEnd(
-                                            backedUpCount = backedUpCount,
-                                            skippedCount = skippedCount,
-                                            totalSizeBytes = totalBackupSize,
-                                            timestamp = java.time.LocalDateTime.now()
-                                        )
-                                    }
+                                    // No-op: work still in progress
                                 }
                             }
                         }
