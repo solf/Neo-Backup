@@ -6,7 +6,7 @@
     "entities": [
       {
         "tableName": "Schedule",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `enabled` INTEGER NOT NULL, `name` TEXT NOT NULL, `timeHour` INTEGER NOT NULL, `timeMinute` INTEGER NOT NULL, `interval` INTEGER NOT NULL, `timePlaced` INTEGER NOT NULL, `filter` INTEGER NOT NULL, `mode` INTEGER NOT NULL, `launchableFilter` INTEGER NOT NULL DEFAULT 0, `updatedFilter` INTEGER NOT NULL DEFAULT 0, `latestFilter` INTEGER NOT NULL DEFAULT 0, `enabledFilter` INTEGER NOT NULL DEFAULT 0, `timeToRun` INTEGER NOT NULL, `customList` TEXT NOT NULL, `blockList` TEXT NOT NULL, `tagsList` TEXT NOT NULL DEFAULT '', `backupModifiedOnly` INTEGER NOT NULL DEFAULT 0)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `enabled` INTEGER NOT NULL, `name` TEXT NOT NULL, `timeHour` INTEGER NOT NULL, `timeMinute` INTEGER NOT NULL, `interval` INTEGER NOT NULL, `timePlaced` INTEGER NOT NULL, `filter` INTEGER NOT NULL, `mode` INTEGER NOT NULL, `launchableFilter` INTEGER NOT NULL DEFAULT 0, `updatedFilter` INTEGER NOT NULL DEFAULT 0, `latestFilter` INTEGER NOT NULL DEFAULT 0, `enabledFilter` INTEGER NOT NULL DEFAULT 0, `timeToRun` INTEGER NOT NULL, `customList` TEXT NOT NULL, `blockList` TEXT NOT NULL, `tagsList` TEXT NOT NULL DEFAULT '', `backupModifiedOnly` INTEGER NOT NULL DEFAULT false)",
         "fields": [
           {
             "fieldPath": "id",
@@ -120,7 +120,7 @@
             "columnName": "backupModifiedOnly",
             "affinity": "INTEGER",
             "notNull": true,
-            "defaultValue": "0"
+            "defaultValue": "false"
           }
         ],
         "primaryKey": {
@@ -168,8 +168,7 @@
             "orders": [],
             "createSql": "CREATE INDEX IF NOT EXISTS `index_Schedule_name` ON `${TABLE_NAME}` (`name`)"
           }
-        ],
-        "foreignKeys": []
+        ]
       },
       {
         "tableName": "Blocklist",
@@ -184,8 +183,7 @@
           {
             "fieldPath": "packageName",
             "columnName": "packageName",
-            "affinity": "TEXT",
-            "notNull": false
+            "affinity": "TEXT"
           },
           {
             "fieldPath": "blocklistId",
@@ -238,8 +236,7 @@
             "orders": [],
             "createSql": "CREATE INDEX IF NOT EXISTS `index_Blocklist_packageName` ON `${TABLE_NAME}` (`packageName`)"
           }
-        ],
-        "foreignKeys": []
+        ]
       },
       {
         "tableName": "AppExtras",
@@ -280,8 +277,7 @@
             "orders": [],
             "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_AppExtras_packageName` ON `${TABLE_NAME}` (`packageName`)"
           }
-        ],
-        "foreignKeys": []
+        ]
       },
       {
         "tableName": "AppInfo",
@@ -302,20 +298,17 @@
           {
             "fieldPath": "apkDir",
             "columnName": "apkDir",
-            "affinity": "TEXT",
-            "notNull": false
+            "affinity": "TEXT"
           },
           {
             "fieldPath": "dataDir",
             "columnName": "dataDir",
-            "affinity": "TEXT",
-            "notNull": false
+            "affinity": "TEXT"
           },
           {
             "fieldPath": "deDataDir",
             "columnName": "deDataDir",
-            "affinity": "TEXT",
-            "notNull": false
+            "affinity": "TEXT"
           },
           {
             "fieldPath": "permissions",
@@ -339,7 +332,6 @@
             "fieldPath": "versionName",
             "columnName": "versionName",
             "affinity": "TEXT",
-            "notNull": false,
             "defaultValue": "'-'"
           },
           {
@@ -357,8 +349,7 @@
           {
             "fieldPath": "sourceDir",
             "columnName": "sourceDir",
-            "affinity": "TEXT",
-            "notNull": false
+            "affinity": "TEXT"
           },
           {
             "fieldPath": "splitSourceDirs",
@@ -404,8 +395,7 @@
             "orders": [],
             "createSql": "CREATE INDEX IF NOT EXISTS `index_AppInfo_isSystem` ON `${TABLE_NAME}` (`isSystem`)"
           }
-        ],
-        "foreignKeys": []
+        ]
       },
       {
         "tableName": "SpecialInfo",
@@ -433,7 +423,6 @@
             "fieldPath": "versionName",
             "columnName": "versionName",
             "affinity": "TEXT",
-            "notNull": false,
             "defaultValue": "'-'"
           },
           {
@@ -451,8 +440,7 @@
           {
             "fieldPath": "sourceDir",
             "columnName": "sourceDir",
-            "affinity": "TEXT",
-            "notNull": false
+            "affinity": "TEXT"
           },
           {
             "fieldPath": "splitSourceDirs",
@@ -498,8 +486,7 @@
             "orders": [],
             "createSql": "CREATE INDEX IF NOT EXISTS `index_SpecialInfo_isSystem` ON `${TABLE_NAME}` (`isSystem`)"
           }
-        ],
-        "foreignKeys": []
+        ]
       },
       {
         "tableName": "Backup",
@@ -527,7 +514,6 @@
             "fieldPath": "versionName",
             "columnName": "versionName",
             "affinity": "TEXT",
-            "notNull": false,
             "defaultValue": "'-'"
           },
           {
@@ -545,8 +531,7 @@
           {
             "fieldPath": "sourceDir",
             "columnName": "sourceDir",
-            "affinity": "TEXT",
-            "notNull": false
+            "affinity": "TEXT"
           },
           {
             "fieldPath": "splitSourceDirs",
@@ -605,26 +590,22 @@
           {
             "fieldPath": "compressionType",
             "columnName": "compressionType",
-            "affinity": "TEXT",
-            "notNull": false
+            "affinity": "TEXT"
           },
           {
             "fieldPath": "cipherType",
             "columnName": "cipherType",
-            "affinity": "TEXT",
-            "notNull": false
+            "affinity": "TEXT"
           },
           {
             "fieldPath": "iv",
             "columnName": "iv",
-            "affinity": "BLOB",
-            "notNull": false
+            "affinity": "BLOB"
           },
           {
             "fieldPath": "cpuArch",
             "columnName": "cpuArch",
-            "affinity": "TEXT",
-            "notNull": false
+            "affinity": "TEXT"
           },
           {
             "fieldPath": "permissions",
@@ -679,11 +660,9 @@
             "orders": [],
             "createSql": "CREATE INDEX IF NOT EXISTS `index_Backup_packageName` ON `${TABLE_NAME}` (`packageName`)"
           }
-        ],
-        "foreignKeys": []
+        ]
       }
     ],
-    "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
       "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '2cf7a9b21b564f9c50eff9056a675ef8')"
