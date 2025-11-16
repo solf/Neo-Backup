@@ -224,6 +224,7 @@
     <string name="sched_timeLeft">Time left:</string>
     <string name="sched_excludeSystemCheckBox">Exclude system apps</string>
     <string name="sched_blocklist">Blocklist</string>
+    <string name="sched_backupModifiedOnly">Only backup modified</string>
     <string name="spec_accounts">Accounts</string>
     <string name="spec_smsmmsjson">SMS/MMS JSON</string>
     <string name="spec_calllogsjson">Call Logs JSON</string>

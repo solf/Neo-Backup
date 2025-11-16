@@ -83,6 +83,8 @@ data class Schedule(
     val blockList: Set<String> = setOf(),
     @ColumnInfo(defaultValue = "")
     val tagsList: Set<String> = setOf(),
+    @ColumnInfo(defaultValue = "false")
+    val backupModifiedOnly: Boolean = false,
 ) {
 
     override fun equals(other: Any?): Boolean {
@@ -105,6 +107,7 @@ data class Schedule(
                 && customList == schedule.customList
                 && blockList == schedule.blockList
                 && tagsList == schedule.tagsList
+                && backupModifiedOnly == schedule.backupModifiedOnly
     }
 
     override fun hashCode(): Int {
@@ -125,6 +128,7 @@ data class Schedule(
         hash = 31 * hash + customList.hashCode()
         hash = 31 * hash + blockList.hashCode()
         hash = 31 * hash + tagsList.hashCode()
+        hash = 31 * hash + if (backupModifiedOnly) 1 else 0
         return hash
     }
 
@@ -146,6 +150,7 @@ data class Schedule(
                 ", customList=" + customList +
                 ", blockList=" + blockList +
                 ", tagsList=" + tagsList +
+                ", backupModifiedOnly=" + backupModifiedOnly +
                 '}'
     }
 

@@ -38,6 +38,7 @@ import com.machiav3lli.backup.data.preferences.pref_autoLogAfterSchedule
 import com.machiav3lli.backup.data.preferences.pref_autoLogSuspicious
 import com.machiav3lli.backup.data.preferences.traceSchedule
 import com.machiav3lli.backup.manager.handler.LogsHandler
+import com.machiav3lli.backup.manager.handler.ScheduleLogHandler
 import com.machiav3lli.backup.manager.handler.WorkHandler
 import com.machiav3lli.backup.manager.handler.getInstalledPackageList
 import com.machiav3lli.backup.manager.handler.showNotification
@@ -155,10 +156,14 @@ class ScheduleWork(
             val finishSignal = MutableStateFlow(false)
             val schedule = scheduleRepo.getSchedule(scheduleId) ?: return@coroutineScope false
 
+            // Log schedule start
+            ScheduleLogHandler.writeScheduleStart(name, java.time.LocalDateTime.now())
+
             val selectedItems = getFilteredPackages(schedule)
 
             if (selectedItems.isEmpty()) {
                 handleEmptySelectedItems(name)
+                ScheduleLogHandler.writeScheduleEnd(0, 0, 0, java.time.LocalDateTime.now())
                 return@coroutineScope false
             }
 
@@ -174,6 +179,7 @@ class ScheduleWork(
             var resultsSuccess = true
             var finished = 0
             val queued = selectedItems.size
+            var totalBackupSize = 0L
 
             val workJobs = selectedItems.map { packageName ->
                 val oneTimeWorkRequest = AppActionWork.Request(
@@ -203,6 +209,11 @@ class ScheduleWork(
                                     val packageLabel =
                                         workInfo.outputData.getString("packageLabel") ?: ""
                                     val error = workInfo.outputData.getString("error") ?: ""
+                                    val backupSize = workInfo.outputData.getLong("backupSize", 0L)
+                                    
+                                    if (succeeded && backupSize > 0) {
+                                        totalBackupSize += backupSize
+                                    }
 
                                     if (error.isNotEmpty()) {
                                         errors = "$errors$packageLabel: ${
@@ -220,6 +231,14 @@ class ScheduleWork(
                                         selectedItems.fastForEach {
                                             packageRepo.updatePackage(it)
                                         }
+                                        // Log completion - we don't track individual SKIPs here,
+                                        // but they're logged in getFilteredPackages
+                                        ScheduleLogHandler.writeScheduleEnd(
+                                            backedUpCount = queued,
+                                            skippedCount = 0, // Skipped count logged individually
+                                            totalSizeBytes = totalBackupSize,
+                                            timestamp = java.time.LocalDateTime.now()
+                                        )
                                     }
                                 }
 
@@ -230,6 +249,13 @@ class ScheduleWork(
                                         selectedItems.fastForEach {
                                             packageRepo.updatePackage(it)
                                         }
+                                        // Log completion
+                                        ScheduleLogHandler.writeScheduleEnd(
+                                            backedUpCount = queued,
+                                            skippedCount = 0,
+                                            totalSizeBytes = totalBackupSize,
+                                            timestamp = java.time.LocalDateTime.now()
+                                        )
                                     }
                                 }
                             }
@@ -272,7 +298,7 @@ class ScheduleWork(
 
                 val unfilteredPackages = context.getInstalledPackageList()
 
-                filterPackages(
+                val filteredPackages = filterPackages(
                     packages = unfilteredPackages,
                     tagsMap = tagsMap,
                     filter = schedule.filter,
@@ -280,7 +306,49 @@ class ScheduleWork(
                     customList = schedule.customList,
                     blockList = blockList,
                     tagsList = tagsList,
-                ).map { it.packageName }
+                )
+
+                // Apply "modified only" filter if enabled and log decisions
+                val finalPackages = if (schedule.backupModifiedOnly) {
+                    filteredPackages.mapNotNull { pkg ->
+                        if (pkg.hasDataChangedSinceLastBackup) {
+                            // Determine reason for backup
+                            val reason = when {
+                                pkg.latestBackup == null -> "no_previous_backup"
+                                pkg.latestBackup!!.versionCode != pkg.versionCode -> 
+                                    "version_changed(${pkg.latestBackup!!.versionCode}→${pkg.versionCode})"
+                                else -> "data_modified"
+                            }
+                            ScheduleLogHandler.writeAppDecision(
+                                pkg.packageName,
+                                pkg.packageLabel,
+                                "BACKUP",
+                                reason
+                            )
+                            pkg
+                        } else {
+                            ScheduleLogHandler.writeAppDecision(
+                                pkg.packageName,
+                                pkg.packageLabel,
+                                "SKIP",
+                                "no_changes"
+                            )
+                            null
+                        }
+                    }
+                } else {
+                    // If not using modified-only filter, backup all filtered packages
+                    filteredPackages.onEach { pkg ->
+                        ScheduleLogHandler.writeAppDecision(
+                            pkg.packageName,
+                            pkg.packageLabel,
+                            "BACKUP",
+                            "scheduled_backup"
+                        )
+                    }
+                }
+
+                finalPackages.map { it.packageName }
 
             } catch (e: FileUtils.BackupLocationInAccessibleException) {
                 Timber.e("Schedule failed: ${e.message}")

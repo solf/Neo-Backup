@@ -346,6 +346,19 @@ fun SchedulePage(
                         }
                     }
                 }
+                item {
+                    CheckChip(
+                        checked = schedule.backupModifiedOnly,
+                        textId = R.string.sched_backupModifiedOnly,
+                        checkedTextId = R.string.sched_backupModifiedOnly,
+                        onCheckedChange = { checked ->
+                            refresh(
+                                schedule.copy(backupModifiedOnly = checked),
+                                false,
+                            )
+                        }
+                    )
+                }
             }
             HorizontalDivider(
                 thickness = 1.dp,

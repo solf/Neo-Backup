@@ -403,6 +403,75 @@ data class Package private constructor(val packageName: String) {
     val isNewOrUpdated: Boolean
         get() = isUpdated || isNew
 
+    val hasDataChangedSinceLastBackup: Boolean
+        get() {
+            val lastBackup = latestBackup ?: return true // No backup = treat as changed
+            val lastBackupTimeMillis = lastBackup.backupDate.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+            
+            // Check version code first (quick check - catches both upgrades and downgrades)
+            if (lastBackup.versionCode != versionCode) return true
+            
+            // Check data directories if they exist
+            try {
+                val dataDirPath = dataPath
+                if (dataDirPath.isNotEmpty()) {
+                    val dataDir = RootFile(dataDirPath)
+                    if (dataDir.exists() && dataDir.lastModified() > lastBackupTimeMillis) {
+                        return true
+                    }
+                }
+                
+                val deDirPath = devicesProtectedDataPath
+                if (deDirPath.isNotEmpty()) {
+                    val deDir = RootFile(deDirPath)
+                    if (deDir.exists() && deDir.lastModified() > lastBackupTimeMillis) {
+                        return true
+                    }
+                }
+                
+                // Check external data if backup included it
+                if (lastBackup.hasExternalData) {
+                    val extPath = getExternalDataPath()
+                    if (extPath.isNotEmpty()) {
+                        val extDir = RootFile(extPath)
+                        if (extDir.exists() && extDir.lastModified() > lastBackupTimeMillis) {
+                            return true
+                        }
+                    }
+                }
+                
+                // Check obb data if backup included it
+                if (lastBackup.hasObbData) {
+                    val obbPath = getObbFilesPath()
+                    if (obbPath.isNotEmpty()) {
+                        val obbDir = RootFile(obbPath)
+                        if (obbDir.exists() && obbDir.lastModified() > lastBackupTimeMillis) {
+                            return true
+                        }
+                    }
+                }
+                
+                // Check media data if backup included it
+                if (lastBackup.hasMediaData) {
+                    val mediaPath = getMediaFilesPath()
+                    if (mediaPath.isNotEmpty()) {
+                        val mediaDir = RootFile(mediaPath)
+                        if (mediaDir.exists() && mediaDir.lastModified() > lastBackupTimeMillis) {
+                            return true
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                // If we can't check, treat as changed to be safe
+                return true
+            }
+            
+            return false
+        }
+
+    val isModifiedOrNew: Boolean
+        get() = hasDataChangedSinceLastBackup || isNew
+
     val hasApk: Boolean
         get() = backupList.any { it.hasApk }
 
