@@ -72,6 +72,12 @@ import timber.log.Timber
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
+data class ScheduleStats(
+    val backedUpCount: Int = 0,
+    val skippedCount: Int = 0,
+    val totalSize: Long = 0L
+)
+
 class ScheduleWork(
     private val context: Context,
     params: WorkerParameters
@@ -130,14 +136,33 @@ class ScheduleWork(
 
             runningSchedules[scheduleId] = false
 
+            var totalBackedUp = 0
+            var totalSkipped = 0
+            var totalSize = 0L
+
             repeat(1 + pref_fakeScheduleDups.value) {
                 val now = SystemUtils.now
                 runningSchedules[scheduleId] = true
-                val result = processSchedule(name, now)
-                if (!result) {
+                val stats = processSchedule(name, now)
+                if (stats == null) {
                     return@withContext Result.failure()
                 }
+                // Accumulate statistics across multiple runs
+                totalBackedUp += stats.backedUpCount
+                totalSkipped += stats.skippedCount
+                totalSize += stats.totalSize
             }
+
+            // Show completion notification with accumulated statistics
+            val totalSizeFormatted = android.text.format.Formatter.formatFileSize(context, totalSize)
+            showNotification(
+                context,
+                NeoActivity::class.java,
+                notificationId,
+                context.getString(R.string.sched_notificationMessage) + ": $name",
+                "Backed up: $totalBackedUp, Skipped: $totalSkipped, Total: $totalSizeFormatted",
+                false
+            )
 
             NeoApp.wakelock(false)
 
@@ -151,10 +176,10 @@ class ScheduleWork(
         }
     }
 
-    private suspend fun processSchedule(name: String, now: Long): Boolean =
+    private suspend fun processSchedule(name: String, now: Long): ScheduleStats? =
         coroutineScope {
             val finishSignal = MutableStateFlow(false)
-            val schedule = scheduleRepo.getSchedule(scheduleId) ?: return@coroutineScope false
+            val schedule = scheduleRepo.getSchedule(scheduleId) ?: return@coroutineScope null
 
             // Log schedule start
             ScheduleLogHandler.writeScheduleStart(name, java.time.LocalDateTime.now())
@@ -164,7 +189,7 @@ class ScheduleWork(
             if (selectedItems.isEmpty()) {
                 handleEmptySelectedItems(name)
                 ScheduleLogHandler.writeScheduleEnd(0, 0, 0, java.time.LocalDateTime.now())
-                return@coroutineScope false
+                return@coroutineScope null
             }
 
             val worksList = mutableListOf<OneTimeWorkRequest>()
@@ -180,6 +205,8 @@ class ScheduleWork(
             var finished = 0
             val queued = selectedItems.size
             var totalBackupSize = 0L
+            var backedUpCount = 0
+            var skippedCount = 0
 
             val workJobs = selectedItems.map { packageName ->
                 val oneTimeWorkRequest = AppActionWork.Request(
@@ -212,8 +239,14 @@ class ScheduleWork(
                                     val error = workInfo.outputData.getString("error") ?: ""
                                     val backupSize = workInfo.outputData.getLong("backupSize", 0L)
                                     
-                                    if (succeeded && backupSize > 0) {
-                                        totalBackupSize += backupSize
+                                    // Track backed up vs skipped
+                                    if (succeeded) {
+                                        if (backupSize > 0) {
+                                            totalBackupSize += backupSize
+                                            backedUpCount++
+                                        } else if (error.contains("Skipped")) {
+                                            skippedCount++
+                                        }
                                     }
 
                                     if (error.isNotEmpty()) {
@@ -232,11 +265,10 @@ class ScheduleWork(
                                         selectedItems.fastForEach {
                                             packageRepo.updatePackage(it)
                                         }
-                                        // Log completion - we don't track individual SKIPs here,
-                                        // but they're logged in getFilteredPackages
+                                        // Log completion with actual statistics
                                         ScheduleLogHandler.writeScheduleEnd(
-                                            backedUpCount = queued,
-                                            skippedCount = 0, // Skipped count logged individually
+                                            backedUpCount = backedUpCount,
+                                            skippedCount = skippedCount,
                                             totalSizeBytes = totalBackupSize,
                                             timestamp = java.time.LocalDateTime.now()
                                         )
@@ -250,10 +282,10 @@ class ScheduleWork(
                                         selectedItems.fastForEach {
                                             packageRepo.updatePackage(it)
                                         }
-                                        // Log completion
+                                        // Log completion with actual statistics
                                         ScheduleLogHandler.writeScheduleEnd(
-                                            backedUpCount = queued,
-                                            skippedCount = 0,
+                                            backedUpCount = backedUpCount,
+                                            skippedCount = skippedCount,
                                             totalSizeBytes = totalBackupSize,
                                             timestamp = java.time.LocalDateTime.now()
                                         )
@@ -270,15 +302,19 @@ class ScheduleWork(
                         .beginWith(worksList)
                         .enqueue()
                     workJobs.awaitAll()
-                    true
+                    ScheduleStats(
+                        backedUpCount = backedUpCount,
+                        skippedCount = skippedCount,
+                        totalSize = totalBackupSize
+                    )
                 } else {
                     endSchedule(name, "duplicate detected")
-                    false
+                    null
                 }
             } else {
                 beginSchedule(name, "no work")
                 endSchedule(name, "no work")
-                false
+                null
             }
         }
 
