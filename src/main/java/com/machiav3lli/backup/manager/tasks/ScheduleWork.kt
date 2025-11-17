@@ -119,7 +119,8 @@ class ScheduleWork(
                 return@withContext Result.failure()
             }
 
-            if (runningSchedules[scheduleId] != null) {
+            // Atomically check if already running and register if not
+            if (runningSchedules.putIfAbsent(scheduleId, false) != null) {
                 val message =
                     "[$scheduleId] duplicate schedule detected: $name (as designed, ignored)"
                 Timber.w(message)
@@ -133,8 +134,6 @@ class ScheduleWork(
                 }
                 return@withContext Result.failure()
             }
-
-            runningSchedules[scheduleId] = false
 
             var totalBackedUp = 0
             var totalSkipped = 0
