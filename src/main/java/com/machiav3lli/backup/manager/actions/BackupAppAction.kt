@@ -528,12 +528,10 @@ open class BackupAppAction(context: Context, work: AppActionWork?, shell: ShellH
         // Implement deduplication with per-package locking
         ApkDeduplicationHelper.withPackageApkLock(app.packageName) {
             try {
-                // Calculate hash from base APK
-                val baseApk = apksToBackup[0]
-                val hashSuffix = ApkDeduplicationHelper.calculateApkHashSuffix(baseApk)
+                // Generate dedup directory name from APK metadata (fast - no file reading)
                 val dedupDirName = ApkDeduplicationHelper.getApkDedupDirName(
                     app.versionCode,
-                    hashSuffix
+                    apksToBackup
                 )
                 val apkSubDir = appBackupBaseDir.findFile("apk")
                     ?: appBackupBaseDir.createDirectory("apk")
@@ -546,7 +544,7 @@ open class BackupAppAction(context: Context, work: AppActionWork?, shell: ShellH
                     // APK already exists and matches - just store reference
                     val relativePath = ApkDeduplicationHelper.getRelativeApkPath(
                         app.versionCode,
-                        hashSuffix
+                        apksToBackup
                     )
                     backupBuilder.setApkStorageDir(relativePath)
                     Timber.i("<${app.packageName}> APK already deduplicated at: $relativePath")
@@ -575,7 +573,7 @@ open class BackupAppAction(context: Context, work: AppActionWork?, shell: ShellH
                     // Store reference to dedup directory
                     val relativePath = ApkDeduplicationHelper.getRelativeApkPath(
                         app.versionCode,
-                        hashSuffix
+                        apksToBackup
                     )
                     backupBuilder.setApkStorageDir(relativePath)
                     Timber.i("<${app.packageName}> Created deduplicated APK at: $relativePath")
