@@ -55,6 +55,7 @@ class ScheduleLogHandler {
         }
 
         fun writeAppDecision(
+            scheduleName: String,
             packageName: String,
             packageLabel: String,
             decision: String, // "BACKUP" or "SKIP"
@@ -68,19 +69,33 @@ class ScheduleLogHandler {
                 val sizeStr = if (decision == "BACKUP" && sizeBytes > 0) {
                     formatSize(sizeBytes)
                 } else "-"
-                val line = "[$timeStr] $packageName ($packageLabel) | $decision | $reason | $sizeStr\n"
+                
+                // Add schedule name at end with extra spacing to make it visually separate
+                val scheduleTag = if (scheduleName.isNotEmpty()) "    | [$scheduleName]" else ""
+                val line = "[$timeStr] $packageName ($packageLabel) | $decision | $reason | $sizeStr$scheduleTag\n"
+                
                 logFile.appendText(line)
             } catch (e: Exception) {
                 Timber.e("Failed to write app decision: $e")
             }
         }
 
-        fun writeScheduleEnd(backedUpCount: Int, skippedCount: Int, totalSizeBytes: Long, timestamp: LocalDateTime) {
+        fun writeScheduleEnd(
+            scheduleName: String,
+            backedUpCount: Int,
+            skippedCount: Int,
+            totalSizeBytes: Long,
+            timestamp: LocalDateTime
+        ) {
             val logFile = getScheduleLogFile() ?: return
             try {
                 val timeStr = timestamp.format(DateTimeFormatter.ofPattern("HH:mm:ss"))
                 val totalSize = formatSize(totalSizeBytes)
-                val summary = "[$timeStr] Completed: $backedUpCount backed up, $skippedCount skipped - Total: $totalSize\n"
+                
+                // Add schedule name at end with extra spacing to make it visually separate
+                val scheduleTag = if (scheduleName.isNotEmpty()) "    | [$scheduleName]" else ""
+                val summary = "[$timeStr] Completed: $backedUpCount backed up, $skippedCount skipped - Total: $totalSize$scheduleTag\n"
+                
                 logFile.appendText(summary)
             } catch (e: Exception) {
                 Timber.e("Failed to write schedule end: $e")

@@ -176,7 +176,7 @@ class ScheduleWork(
 
             if (selectedItems.isEmpty()) {
                 handleEmptySelectedItems(name)
-                ScheduleLogHandler.writeScheduleEnd(0, 0, 0, java.time.LocalDateTime.now())
+                ScheduleLogHandler.writeScheduleEnd(name, 0, 0, 0, java.time.LocalDateTime.now())
                 return@coroutineScope null
             }
 
@@ -243,6 +243,7 @@ class ScheduleWork(
                                             }
                                             
                                             ScheduleLogHandler.writeAppDecision(
+                                                name,
                                                 packageName,
                                                 packageLabel,
                                                 "BACKUP",
@@ -254,6 +255,7 @@ class ScheduleWork(
                                             
                                             // Log skipped app
                                             ScheduleLogHandler.writeAppDecision(
+                                                name,
                                                 packageName,
                                                 packageLabel,
                                                 "SKIP",
@@ -281,6 +283,7 @@ class ScheduleWork(
                                         }
                                         // Log completion with actual statistics
                                         ScheduleLogHandler.writeScheduleEnd(
+                                            scheduleName = name,
                                             backedUpCount = backedUpCount,
                                             skippedCount = skippedCount,
                                             totalSizeBytes = totalBackupSize,
