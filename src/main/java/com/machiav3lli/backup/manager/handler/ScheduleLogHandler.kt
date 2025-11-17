@@ -29,6 +29,7 @@ import java.time.format.DateTimeFormatter
 class ScheduleLogHandler {
     companion object {
         private const val SCHEDULE_LOG_FILENAME = "schedules.log"
+        private val logLock = Any()
 
         fun getScheduleLogFile(): StorageFile? {
             return NeoApp.backupRoot?.let { backupRoot ->
@@ -92,21 +93,14 @@ class ScheduleLogHandler {
         }
 
         private fun StorageFile.appendText(text: String) {
-            try {
-                // Read existing content
-                val existingContent = try {
-                    readText()
+            synchronized(logLock) {
+                try {
+                    appendOutputStream()?.use { out ->
+                        out.write(text.toByteArray(StandardCharsets.UTF_8))
+                    }
                 } catch (e: Exception) {
-                    "" // File doesn't exist or can't be read
+                    Timber.e("Failed to append to schedule log: $e")
                 }
-                
-                // Write combined content
-                val newContent = existingContent + text
-                outputStream()?.use { out ->
-                    out.write(newContent.toByteArray(StandardCharsets.UTF_8))
-                }
-            } catch (e: Exception) {
-                Timber.e("Failed to append to schedule log: $e")
             }
         }
     }

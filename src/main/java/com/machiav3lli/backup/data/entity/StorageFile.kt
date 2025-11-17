@@ -20,6 +20,8 @@ import com.machiav3lli.backup.ui.pages.pref_cacheUris
 import com.machiav3lli.backup.ui.pages.pref_shadowRootFile
 import com.machiav3lli.backup.utils.SystemUtils.getShadowPath
 import com.machiav3lli.backup.utils.SystemUtils.isWritablePath
+import com.topjohnwu.superuser.io.SuFile
+import com.topjohnwu.superuser.io.SuFileOutputStream
 import timber.log.Timber
 import java.io.File
 import java.io.FileNotFoundException
@@ -414,6 +416,15 @@ open class StorageFile {
         documentInfo = null
         return file?.outputStream() ?: uri?.let { uri ->
             context.contentResolver?.openOutputStream(uri, "w")
+        }
+    }
+
+    fun appendOutputStream(): OutputStream? {
+        documentInfo = null
+        return file?.let {
+            SuFileOutputStream.open(SuFile(it.absolutePath), true) // append=true
+        } ?: uri?.let { uri ->
+            context.contentResolver?.openOutputStream(uri, "wa") // "wa" = write-append
         }
     }
 
