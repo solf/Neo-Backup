@@ -24,6 +24,7 @@ import com.machiav3lli.backup.data.dbs.entity.SpecialInfo
 import com.machiav3lli.backup.data.entity.ActionResult
 import com.machiav3lli.backup.data.entity.Package
 import com.machiav3lli.backup.data.entity.StorageFile
+import com.machiav3lli.backup.manager.handler.BackupBuilder
 import com.machiav3lli.backup.manager.handler.LogsHandler
 import com.machiav3lli.backup.manager.handler.ShellHandler
 import com.machiav3lli.backup.manager.handler.ShellHandler.ShellCommandFailedException
@@ -124,8 +125,13 @@ class BackupSpecialAction(context: Context, work: AppActionWork?, shell: ShellHa
     }
 
     // Stubbing some functions, to avoid executing them with potentially dangerous results
-    override fun backupPackage(app: Package, backupInstanceDir: StorageFile) {
-        // stub
+    override fun backupPackage(
+        app: Package,
+        backupInstanceDir: StorageFile,
+        appBackupBaseDir: StorageFile,
+        backupBuilder: BackupBuilder
+    ) {
+        // stub - special backups don't have APKs
     }
 
     override fun backupDeviceProtectedData(

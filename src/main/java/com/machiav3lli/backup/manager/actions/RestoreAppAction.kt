@@ -223,13 +223,32 @@ open class RestoreAppAction(context: Context, work: AppActionWork?, shell: Shell
 
         Timber.i("<$packageName> Restoring from $backupDir to profile $profileId")
 
+        // Resolve APK directory - use deduplicated location if specified, otherwise backup dir
+        val apkStorageDir = backup.apkStorageDir
+        val apkDir = if (apkStorageDir != null) {
+            // APKs are in deduplicated location - resolve relative to app backup base dir
+            val appBackupBaseDir = backupDir.parent?.parent 
+                ?: throw RestoreFailedException("Cannot resolve app backup base directory", null)
+            val resolvedApkDir = appBackupBaseDir.findFile(apkStorageDir)
+                ?: throw RestoreFailedException(
+                    "Deduplicated APK directory not found: $apkStorageDir",
+                    null
+                )
+            Timber.i("<$packageName> Using deduplicated APKs from: $apkStorageDir")
+            resolvedApkDir
+        } else {
+            // Old backup format - APKs are in backup instance directory
+            Timber.d("<$packageName> Using APKs from backup instance directory (legacy format)")
+            backupDir
+        }
+
         val apkTargetPath = File(backup.sourceDir ?: BASE_APK_FILENAME)
         val baseApkName = apkTargetPath.name
-        val baseApkFile = backupDir.findFile(baseApkName)
+        val baseApkFile = apkDir.findFile(baseApkName)
             ?: throw RestoreFailedException("$baseApkName is missing in backup", null)
         Timber.d("<$packageName> Found $baseApkName in backup archive")
         val splitApksInBackup: Array<StorageFile> = try {
-            backupDir.listFiles()
+            apkDir.listFiles()
                 .filter { it.name?.endsWith(".apk") == true } // Only apks are relevant (first because it's a cheap test)
                 .filter { !it.isDirectory } // Forget directories (in case it's called *.apk)
                 .filter { it.name != baseApkName } // Base apk is a special case
