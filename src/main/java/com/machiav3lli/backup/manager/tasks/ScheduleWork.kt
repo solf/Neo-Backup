@@ -257,39 +257,38 @@ class ScheduleWork(
                                     debugLog { "processSchedule() Flow: job terminal state=${workInfo.state}, pkg=$packageName, succeeded=$succeeded, finished=$finished/$queued" }
                                     
                                     // Track backed up vs skipped and log to schedule log
-                                    if (succeeded) {
-                                        if (backupSize > 0) {
-                                            totalBackupSize += backupSize
-                                            backedUpCount++
-                                            
-                                            // Use simple reason based on schedule settings
-                                            val reason = if (schedule.backupModifiedOnly) {
-                                                "modified_data"
+                                    run {
+                                        val decision: String
+                                        val reason: String
+                                        val logSize: Long
+                                        
+                                        if (succeeded) {
+                                            if (error.contains("Skipped")) {
+                                                skippedCount++
+                                                decision = "SKIP"
+                                                reason = "no_changes"
+                                                logSize = 0L
                                             } else {
-                                                "scheduled_backup"
+                                                totalBackupSize += backupSize
+                                                backedUpCount++
+                                                decision = "BACKUP"
+                                                reason = if (schedule.backupModifiedOnly) "modified_data" else "scheduled_backup"
+                                                logSize = backupSize
                                             }
-                                            
-                                            ScheduleLogHandler.writeAppDecision(
-                                                name,
-                                                packageName,
-                                                packageLabel,
-                                                "BACKUP",
-                                                reason,
-                                                sizeBytes = backupSize
-                                            )
-                                        } else if (error.contains("Skipped")) {
-                                            skippedCount++
-                                            
-                                            // Log skipped app
-                                            ScheduleLogHandler.writeAppDecision(
-                                                name,
-                                                packageName,
-                                                packageLabel,
-                                                "SKIP",
-                                                "no_changes",
-                                                sizeBytes = 0L
-                                            )
+                                        } else {
+                                            decision = "FAILED"
+                                            reason = error.ifEmpty { "unknown_error" }
+                                            logSize = 0L
                                         }
+                                        
+                                        ScheduleLogHandler.writeAppDecision(
+                                            name,
+                                            packageName,
+                                            packageLabel,
+                                            decision,
+                                            reason,
+                                            sizeBytes = logSize
+                                        )
                                     }
 
                                     if (error.isNotEmpty()) {
