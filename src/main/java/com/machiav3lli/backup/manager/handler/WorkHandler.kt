@@ -81,6 +81,7 @@ class WorkHandler(
     //val endDelay = 10000L
 
     fun endBatches() {
+        debugLog { "WorkHandler.endBatches() ENTRY: cleaning up all batches" }
         Timber.d("%%%%% ALL PRUNE")
         get<WorkHandler>(WorkHandler::class.java).prune()
 
@@ -107,9 +108,11 @@ class WorkHandler(
         Timber.d("%%%%% ALL DONE")
 
         NeoApp.wakelock(false)
+        debugLog { "WorkHandler.endBatches() EXIT: cleanup complete" }
     }
 
     fun beginBatch(batchName: String) {
+        debugLog { "WorkHandler.beginBatch() ENTRY: batchName='$batchName'" }
         NeoApp.wakelock(true)
         if (batchesStarted < 0)
             batchesStarted = 0
@@ -118,21 +121,30 @@ class WorkHandler(
             beginBatches()
         Timber.d("%%%%% $batchName begin, $batchesStarted batches, thread ${Thread.currentThread().id}")
         batchesKnown.put(batchName, BatchState())
+        debugLog { "WorkHandler.beginBatch() EXIT: batchesStarted=$batchesStarted" }
     }
 
     fun endBatch(batchName: String) {
+        debugLog { "WorkHandler.endBatch() ENTRY: batchName='$batchName', batchesStarted=$batchesStarted" }
         batchesStarted--
         Timber.d("%%%%% $batchName end, $batchesStarted batches, thread ${Thread.currentThread().id}")
         Thread.sleep(endDelay)
         NeoApp.wakelock(false)
+        debugLog { "WorkHandler.endBatch() EXIT: batchesStarted=$batchesStarted (after decrement)" }
     }
 
     fun justFinishedAll(): Boolean {
-        if (batchesStarted == 0) {  // do this exactly once
+        val result = if (batchesStarted == 0) {  // do this exactly once
+            debugLog { "WorkHandler.justFinishedAll() ALL BATCHES FINISHED: batchesStarted=0, returning true" }
             batchesStarted--        // now lock this (counter < 0)
-            return true
+            true
+        } else {
+            false
         }
-        return false
+        if (!result) {
+            debugLog { "WorkHandler.justFinishedAll() NOT finished: batchesStarted=$batchesStarted, returning false" }
+        }
+        return result
     }
 
     fun cancel(tag: String? = null) {
@@ -271,11 +283,12 @@ class WorkHandler(
         }
 
         fun onProgressNoSync(handler: WorkHandler, workInfos: List<WorkInfo>? = null) {
-
             val manager = handler.manager
             val work = workInfos
                 ?: manager.getWorkInfosByTag(AppActionWork::class.qualifiedName!!).get()
                 ?: return
+
+            debugLog { "WorkHandler.onProgressNoSync() ENTRY: work count=${work.size}" }
 
             val now = SystemUtils.now
             val batchesRunning = mutableMapOf<String, WorkState>()
@@ -317,6 +330,7 @@ class WorkHandler(
                     if (batch.startTime == 0L) {
                         batch.startTime = now
                         batch.endTime = 0L
+                        debugLog { "WorkHandler.onProgressNoSync() batch '$batchName' START: startTime=$now" }
                     }
 
                     workCount++
@@ -427,6 +441,7 @@ class WorkHandler(
                         } else {
                             //shortText += " ${OABX.context.getString(R.string.finished)}"
                             title += " - ${if (failed == 0) "ok" else "$failed failed"}"
+                            debugLog { "WorkHandler.onProgressNoSync() batch '$batchName' remaining=0: processed=$processed, succeeded=$succeeded, failed=$failed" }
 
                             Timber.i("%%%%% $batchName isFinished=true")
 
@@ -552,32 +567,41 @@ class WorkHandler(
                         val notification = notificationBuilder.build()
                         val workHandler = get<WorkHandler>(WorkHandler::class.java)
                         Timber.d("%%%%%%%%%%%%%%%%%%%%> $batchName ${batch.notificationId} '$shortText' $notification")
+                        debugLog { "WorkHandler.onProgressNoSync() calling notify: batchName='$batchName', notificationId=${batch.notificationId}, remaining=$remaining" }
                         workHandler.notify(
                             batch.notificationId,
                             notification
                         )
 
                         if (remaining <= 0) {
-                            if (batch.nFinished == 0)
+                            debugLog { "WorkHandler.onProgressNoSync() remaining <= 0: batch.nFinished=${batch.nFinished}" }
+                            if (batch.nFinished == 0) {
+                                debugLog { "WorkHandler.onProgressNoSync() calling endBatch for '$batchName'" }
                                 workHandler.endBatch(batchName)
+                            }
                             batch.nFinished += 1
+                            debugLog { "WorkHandler.onProgressNoSync() batch.nFinished incremented to ${batch.nFinished}" }
                         }
                     }
                 }
             }
 
+            debugLog { "WorkHandler.onProgressNoSync() allRemaining=$allRemaining, allProcessed=$allProcessed, allCount=$allCount" }
             if (allRemaining > 0) {
                 Timber.d("%%%%% ALL finished=$allProcessed <-- remain=$allRemaining <-- total=$allCount")
                 NeoApp.setProgress(allProcessed, allCount)
             } else {
+                debugLog { "WorkHandler.onProgressNoSync() allRemaining=0: ALL WORK COMPLETE" }
                 packagesState.clear()
                 NeoApp.setProgress()
                 val workHandler = get<WorkHandler>(WorkHandler::class.java)
                 if (workHandler.justFinishedAll()) {
+                    debugLog { "WorkHandler.onProgressNoSync() calling endBatches()" }
                     Timber.d("%%%%% ALL $batchesStarted batches, thread ${Thread.currentThread().id}")
                     workHandler.endBatches()
                 }
             }
+            debugLog { "WorkHandler.onProgressNoSync() EXIT" }
         }
     }
 }

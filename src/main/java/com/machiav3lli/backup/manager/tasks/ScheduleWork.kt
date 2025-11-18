@@ -37,6 +37,7 @@ import com.machiav3lli.backup.data.dbs.repository.ScheduleRepository
 import com.machiav3lli.backup.data.preferences.pref_autoLogAfterSchedule
 import com.machiav3lli.backup.data.preferences.pref_autoLogSuspicious
 import com.machiav3lli.backup.data.preferences.traceSchedule
+import com.machiav3lli.backup.manager.handler.debugLog
 import com.machiav3lli.backup.manager.handler.LogsHandler
 import com.machiav3lli.backup.manager.handler.ScheduleLogHandler
 import com.machiav3lli.backup.manager.handler.WorkHandler
@@ -107,6 +108,8 @@ class ScheduleWork(
             scheduleId = inputData.getLong(EXTRA_SCHEDULE_ID, -1L)
             val name = inputData.getString(EXTRA_NAME) ?: ""
 
+            debugLog { "ScheduleWork.doWork() ENTRY: scheduleId=$scheduleId, name='$name'" }
+
             NeoApp.wakelock(true)
 
             traceSchedule {
@@ -116,13 +119,17 @@ class ScheduleWork(
             }
 
             if (scheduleId < 0) {
+                debugLog { "ScheduleWork.doWork() FAILED: scheduleId < 0" }
                 return@withContext Result.failure()
             }
 
             // Atomically check if already running and register if not
-            if (runningSchedules.putIfAbsent(scheduleId, false) != null) {
+            val putResult = runningSchedules.putIfAbsent(scheduleId, false)
+            debugLog { "ScheduleWork.doWork() duplicate check: putIfAbsent result=$putResult" }
+            if (putResult != null) {
                 val message =
                     "[$scheduleId] duplicate schedule detected: $name (as designed, ignored)"
+                debugLog { "ScheduleWork.doWork() DUPLICATE DETECTED: returning failure" }
                 Timber.w(message)
                 if (pref_autoLogSuspicious.value) {
                     textLog(
@@ -139,26 +146,37 @@ class ScheduleWork(
             var totalSkipped = 0
             var totalSize = 0L
 
-            repeat(1 + pref_fakeScheduleDups.value) {
+            val repeatCount = 1 + pref_fakeScheduleDups.value
+            debugLog { "ScheduleWork.doWork() repeat loop: count=$repeatCount (pref_fakeScheduleDups=${pref_fakeScheduleDups.value})" }
+            repeat(repeatCount) { iteration ->
+                debugLog { "ScheduleWork.doWork() repeat iteration $iteration/$repeatCount START" }
                 val now = SystemUtils.now
                 runningSchedules[scheduleId] = true
+                val startTime = System.currentTimeMillis()
                 val stats = processSchedule(name, now)
+                val elapsed = System.currentTimeMillis() - startTime
+                debugLog { "ScheduleWork.doWork() processSchedule() returned: stats=$stats, elapsed=${elapsed}ms" }
                 if (stats == null) {
+                    debugLog { "ScheduleWork.doWork() processSchedule() returned NULL, returning failure" }
                     return@withContext Result.failure()
                 }
                 // Accumulate statistics across multiple runs
                 totalBackedUp += stats.backedUpCount
                 totalSkipped += stats.skippedCount
                 totalSize += stats.totalSize
+                debugLog { "ScheduleWork.doWork() repeat iteration $iteration/$repeatCount END: accumulated backedUp=$totalBackedUp, skipped=$totalSkipped, size=$totalSize" }
             }
 
+            debugLog { "ScheduleWork.doWork() all iterations complete, returning SUCCESS" }
             NeoApp.wakelock(false)
 
             Result.success()
         } catch (e: Exception) {
+            debugLog { "ScheduleWork.doWork() EXCEPTION: ${e.javaClass.simpleName}: ${e.message}" }
             Timber.e(e)
             Result.failure()
         } finally {
+            debugLog { "ScheduleWork.doWork() FINALLY: cleaning up, removing scheduleId=$scheduleId from runningSchedules" }
             runningSchedules.remove(scheduleId)
             NeoApp.wakelock(false)
         }
@@ -166,15 +184,23 @@ class ScheduleWork(
 
     private suspend fun processSchedule(name: String, now: Long): ScheduleStats? =
         coroutineScope {
+            debugLog { "processSchedule() ENTRY: name='$name', now=$now, scheduleId=$scheduleId" }
             val finishSignal = MutableStateFlow(false)
-            val schedule = scheduleRepo.getSchedule(scheduleId) ?: return@coroutineScope null
+            val schedule = scheduleRepo.getSchedule(scheduleId)
+            debugLog { "processSchedule() getSchedule: schedule=${if (schedule != null) "found" else "NULL"}" }
+            if (schedule == null) {
+                debugLog { "processSchedule() EXIT: schedule is NULL, returning null" }
+                return@coroutineScope null
+            }
 
             // Log schedule start
             ScheduleLogHandler.writeScheduleStart(name, java.time.LocalDateTime.now())
 
             val selectedItems = getFilteredPackages(schedule)
+            debugLog { "processSchedule() getFilteredPackages: count=${selectedItems.size}" }
 
             if (selectedItems.isEmpty()) {
+                debugLog { "processSchedule() EXIT: selectedItems is empty, returning null" }
                 handleEmptySelectedItems(name)
                 ScheduleLogHandler.writeScheduleEnd(name, 0, 0, 0, java.time.LocalDateTime.now())
                 return@coroutineScope null
@@ -228,6 +254,7 @@ class ScheduleWork(
                                         workInfo.outputData.getString("packageName") ?: ""
                                     val error = workInfo.outputData.getString("error") ?: ""
                                     val backupSize = workInfo.outputData.getLong("backupSize", 0L)
+                                    debugLog { "processSchedule() Flow: job terminal state=${workInfo.state}, pkg=$packageName, succeeded=$succeeded, finished=$finished/$queued" }
                                     
                                     // Track backed up vs skipped and log to schedule log
                                     if (succeeded) {
@@ -276,12 +303,14 @@ class ScheduleWork(
                                     resultsSuccess = resultsSuccess && succeeded
 
                                     if (finished >= queued) {
+                                        debugLog { "processSchedule() Flow: finished >= queued ($finished >= $queued), setting finishSignal" }
                                         finishSignal.update { true }
                                         endSchedule(name, "all jobs finished")
                                         selectedItems.fastForEach {
                                             packageRepo.updatePackage(it)
                                         }
                                         // Log completion with actual statistics
+                                        debugLog { "processSchedule() calling writeScheduleEnd: backedUp=$backedUpCount, skipped=$skippedCount, size=$totalBackupSize" }
                                         ScheduleLogHandler.writeScheduleEnd(
                                             scheduleName = name,
                                             backedUpCount = backedUpCount,
@@ -289,6 +318,7 @@ class ScheduleWork(
                                             totalSizeBytes = totalBackupSize,
                                             timestamp = java.time.LocalDateTime.now()
                                         )
+                                        debugLog { "processSchedule() writeScheduleEnd COMPLETED" }
                                     }
                                 }
 
@@ -306,22 +336,30 @@ class ScheduleWork(
                 }
             }
 
+            debugLog { "processSchedule() worksList.size=${worksList.size}, workJobs.size=${workJobs.size}" }
             if (worksList.isNotEmpty()) {
                 if (beginSchedule(name, "queueing work")) {
+                    debugLog { "processSchedule() calling WorkManager.beginWith().enqueue() with ${worksList.size} work items" }
                     get<WorkManager>(WorkManager::class.java)
                         .beginWith(worksList)
                         .enqueue()
+                    debugLog { "processSchedule() enqueue COMPLETED, now calling workJobs.awaitAll() for ${workJobs.size} async jobs" }
+                    val awaitStartTime = System.currentTimeMillis()
                     workJobs.awaitAll()
+                    val awaitElapsed = System.currentTimeMillis() - awaitStartTime
+                    debugLog { "processSchedule() workJobs.awaitAll() RETURNED after ${awaitElapsed}ms" }
                     ScheduleStats(
                         backedUpCount = backedUpCount,
                         skippedCount = skippedCount,
                         totalSize = totalBackupSize
                     )
                 } else {
+                    debugLog { "processSchedule() beginSchedule returned false (duplicate), returning null" }
                     endSchedule(name, "duplicate detected")
                     null
                 }
             } else {
+                debugLog { "processSchedule() worksList is empty, returning null" }
                 beginSchedule(name, "no work")
                 endSchedule(name, "no work")
                 null

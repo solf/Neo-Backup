@@ -36,6 +36,7 @@ import com.machiav3lli.backup.NeoApp
 import com.machiav3lli.backup.R
 import com.machiav3lli.backup.data.dbs.repository.ScheduleRepository
 import com.machiav3lli.backup.data.preferences.traceSchedule
+import com.machiav3lli.backup.manager.handler.debugLog
 import com.machiav3lli.backup.manager.handler.showNotification
 import com.machiav3lli.backup.manager.tasks.ScheduleWork
 import com.machiav3lli.backup.ui.activities.NeoActivity
@@ -59,15 +60,19 @@ open class ScheduleService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
+        debugLog { "ScheduleService.onCreate() ENTRY: PID=${Process.myPid()}" }
         NeoApp.wakelock(true)
         traceSchedule { "%%%%% ############################################################ ScheduleService create" }
         super.onCreate()
         this.notificationId = SystemUtils.now.toInt()
 
-        if (pref_useForegroundInService.value) {
+        val useForeground = pref_useForegroundInService.value
+        debugLog { "ScheduleService.onCreate() useForegroundInService=$useForeground, notificationId=$notificationId" }
+        if (useForeground) {
             createNotificationChannel()
             createForegroundInfo()
             startForeground(notification.hashCode(), this.notification)
+            debugLog { "ScheduleService.onCreate() started as FOREGROUND service" }
         }
 
         showNotification(
@@ -81,17 +86,23 @@ open class ScheduleService : Service() {
             "",
             true
         )
+        debugLog { "ScheduleService.onCreate() EXIT: created notification" }
     }
 
     override fun onDestroy() {
+        debugLog { "ScheduleService.onDestroy() ENTRY: service being destroyed" }
         traceSchedule { "%%%%% ############################################################ ScheduleService destroy" }
         NeoApp.wakelock(false)
         super.onDestroy()
+        debugLog { "ScheduleService.onDestroy() EXIT" }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val scheduleId = intent?.getLongExtra(EXTRA_SCHEDULE_ID, -1L) ?: -1L
         val scheduleName = intent?.getStringExtra(EXTRA_NAME) ?: ""
+        val action = intent?.action
+
+        debugLog { "ScheduleService.onStartCommand() ENTRY: scheduleId=$scheduleId, name='$scheduleName', startId=$startId, action=$action" }
 
         NeoApp.wakelock(true)
 
@@ -108,8 +119,9 @@ open class ScheduleService : Service() {
         }
 
         if (intent != null) {
-            when (val action = intent.action) {
+            when (action) {
                 ACTION_CANCEL       -> {
+                    debugLog { "ScheduleService.onStartCommand() ACTION_CANCEL: calling stopSelf()" }
                     traceSchedule { "[$scheduleId] name='$scheduleName' action=$action" }
                     ScheduleWork.cancel(scheduleId)
                     NeoApp.wakelock(false)
@@ -118,22 +130,28 @@ open class ScheduleService : Service() {
                 }
 
                 ACTION_RUN_SCHEDULE -> {
+                    debugLog { "ScheduleService.onStartCommand() ACTION_RUN_SCHEDULE" }
                     // scheduleId already read from extras
                     traceSchedule { "[$scheduleId] name='$scheduleName' action=$action" }
                 }
 
                 null                -> {
+                    debugLog { "ScheduleService.onStartCommand() action=null, standard action" }
                     // no action = standard action, simply continue with extra data
                 }
 
                 else                -> {
+                    debugLog { "ScheduleService.onStartCommand() unknown action=$action" }
                     traceSchedule { "[$scheduleId] name='$scheduleName' action=$action unknown, ignored" }
                 }
             }
         }
 
         if (scheduleId >= 0) {
-            repeat(1 + pref_fakeScheduleDups.value) { count ->
+            val repeatCount = 1 + pref_fakeScheduleDups.value
+            debugLog { "ScheduleService.onStartCommand() repeatCount=$repeatCount (pref_fakeScheduleDups=${pref_fakeScheduleDups.value})" }
+            repeat(repeatCount) { count ->
+                debugLog { "ScheduleService.onStartCommand() repeat iteration $count: enqueueing schedule" }
                 CoroutineScope(Dispatchers.IO).launch {
                     scheduleNextAlarm(this@ScheduleService, scheduleId, true)
                 }
@@ -145,6 +163,7 @@ open class ScheduleService : Service() {
         scheduleAlarmsOnce(this)
 
         NeoApp.wakelock(false)
+        debugLog { "ScheduleService.onStartCommand() EXIT: returning START_NOT_STICKY" }
         return START_NOT_STICKY
     }
 

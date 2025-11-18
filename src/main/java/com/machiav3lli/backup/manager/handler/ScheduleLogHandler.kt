@@ -44,12 +44,19 @@ class ScheduleLogHandler {
         }
 
         fun writeScheduleStart(scheduleName: String, timestamp: LocalDateTime) {
-            val logFile = getScheduleLogFile() ?: return
+            debugLog { "ScheduleLogHandler.writeScheduleStart() scheduleName='$scheduleName', timestamp=$timestamp" }
+            val logFile = getScheduleLogFile()
+            if (logFile == null) {
+                debugLog { "ScheduleLogHandler.writeScheduleStart() FAILED: logFile is NULL" }
+                return
+            }
             try {
                 val dateStr = BACKUP_DATE_TIME_FORMATTER.format(timestamp)
                 val header = "\n${"=".repeat(60)}\nSchedule: $scheduleName - $dateStr\n${"=".repeat(60)}\n"
                 logFile.appendText(header)
+                debugLog { "ScheduleLogHandler.writeScheduleStart() SUCCESS" }
             } catch (e: Exception) {
+                debugLog { "ScheduleLogHandler.writeScheduleStart() EXCEPTION: ${e.javaClass.simpleName}: ${e.message}" }
                 Timber.e("Failed to write schedule start: $e")
             }
         }
@@ -87,7 +94,12 @@ class ScheduleLogHandler {
             totalSizeBytes: Long,
             timestamp: LocalDateTime
         ) {
-            val logFile = getScheduleLogFile() ?: return
+            debugLog { "ScheduleLogHandler.writeScheduleEnd() scheduleName='$scheduleName', backedUp=$backedUpCount, skipped=$skippedCount, size=$totalSizeBytes" }
+            val logFile = getScheduleLogFile()
+            if (logFile == null) {
+                debugLog { "ScheduleLogHandler.writeScheduleEnd() FAILED: logFile is NULL" }
+                return
+            }
             try {
                 val timeStr = timestamp.format(DateTimeFormatter.ofPattern("HH:mm:ss"))
                 val totalSize = formatSize(totalSizeBytes)
@@ -97,7 +109,9 @@ class ScheduleLogHandler {
                 val summary = "[$timeStr] Completed: $backedUpCount backed up, $skippedCount skipped - Total: $totalSize$scheduleTag\n"
                 
                 logFile.appendText(summary)
+                debugLog { "ScheduleLogHandler.writeScheduleEnd() SUCCESS" }
             } catch (e: Exception) {
+                debugLog { "ScheduleLogHandler.writeScheduleEnd() EXCEPTION: ${e.javaClass.simpleName}: ${e.message}" }
                 Timber.e("Failed to write schedule end: $e")
             }
         }

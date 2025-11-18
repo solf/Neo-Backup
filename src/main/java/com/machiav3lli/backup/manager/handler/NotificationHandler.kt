@@ -47,6 +47,7 @@ fun showNotification(
     bigText: String,
     autoCancel: Boolean
 ) {
+    debugLog { "showNotification() id=$id, title='$title', text='$text', autoCancel=$autoCancel" }
     val resultIntent = Intent(context, parentActivity)
     resultIntent.flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
     val resultPendingIntent = PendingIntent.getActivity(
@@ -75,4 +76,5 @@ fun showNotification(
         .setContentIntent(resultPendingIntent)
         .build()
     notificationManager.notify(id, notification)
+    debugLog { "showNotification() notification posted successfully" }
 }

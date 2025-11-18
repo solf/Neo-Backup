@@ -70,6 +70,12 @@ val pref_autoLogUnInstallBroadcast = BooleanPref(
     defaultValue = false
 )
 
+val pref_debugLog = BooleanPref(
+    key = "dev-log.debugLog",
+    summary = "write detailed debug logs to file (debug.log)",
+    defaultValue = false
+)
+
 //---------------------------------------- developer settings - tracing
 
 val pref_trace = BooleanPref(
