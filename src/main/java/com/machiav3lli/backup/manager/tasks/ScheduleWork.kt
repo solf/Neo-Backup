@@ -290,6 +290,7 @@ class ScheduleWork(
                                             sizeBytes = logSize
                                         )
                                     }
+                                    debugLog { "processSchedule() Flow: counters after $packageName: backedUp=$backedUpCount, skipped=$skippedCount, finished=$finished/$queued" }
 
                                     if (error.isNotEmpty()) {
                                         errors = "$errors$packageLabel: ${
