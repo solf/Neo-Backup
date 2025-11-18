@@ -48,6 +48,8 @@ import com.machiav3lli.backup.ui.activities.NeoActivity
 import com.machiav3lli.backup.ui.pages.pref_fakeScheduleDups
 import com.machiav3lli.backup.ui.pages.pref_useForegroundInService
 import com.machiav3lli.backup.ui.pages.supportInfo
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import com.machiav3lli.backup.ui.pages.textLog
 import com.machiav3lli.backup.utils.FileUtils
 import com.machiav3lli.backup.utils.StorageLocationNotConfiguredException
@@ -216,11 +218,11 @@ class ScheduleWork(
 
             var errors = ""
             var resultsSuccess = true
-            var finished = 0
+            val finished = AtomicInteger(0)
             val queued = selectedItems.size
-            var totalBackupSize = 0L
-            var backedUpCount = 0
-            var skippedCount = 0
+            val totalBackupSize = AtomicLong(0L)
+            val backedUpCount = AtomicInteger(0)
+            val skippedCount = AtomicInteger(0)
 
             val workJobs = selectedItems.map { packageName ->
                 val oneTimeWorkRequest = AppActionWork.Request(
@@ -245,7 +247,7 @@ class ScheduleWork(
                                 androidx.work.WorkInfo.State.SUCCEEDED,
                                 androidx.work.WorkInfo.State.FAILED,
                                 androidx.work.WorkInfo.State.CANCELLED -> {
-                                    finished++
+                                    finished.incrementAndGet()
                                     val succeeded =
                                         workInfo.outputData.getBoolean("succeeded", false)
                                     val packageLabel =
@@ -254,7 +256,7 @@ class ScheduleWork(
                                         workInfo.outputData.getString("packageName") ?: ""
                                     val error = workInfo.outputData.getString("error") ?: ""
                                     val backupSize = workInfo.outputData.getLong("backupSize", 0L)
-                                    debugLog { "processSchedule() Flow: job terminal state=${workInfo.state}, pkg=$packageName, succeeded=$succeeded, finished=$finished/$queued" }
+                                    debugLog { "processSchedule() Flow: job terminal state=${workInfo.state}, pkg=$packageName, succeeded=$succeeded, finished=${finished.get()}/$queued" }
                                     
                                     // Track backed up vs skipped and log to schedule log
                                     run {
@@ -264,13 +266,13 @@ class ScheduleWork(
                                         
                                         if (succeeded) {
                                             if (error.contains("Skipped")) {
-                                                skippedCount++
+                                                skippedCount.incrementAndGet()
                                                 decision = "SKIP"
                                                 reason = "no_changes"
                                                 logSize = 0L
                                             } else {
-                                                totalBackupSize += backupSize
-                                                backedUpCount++
+                                                totalBackupSize.addAndGet(backupSize)
+                                                backedUpCount.incrementAndGet()
                                                 decision = "BACKUP"
                                                 reason = if (schedule.backupModifiedOnly) "modified_data" else "scheduled_backup"
                                                 logSize = backupSize
@@ -290,7 +292,7 @@ class ScheduleWork(
                                             sizeBytes = logSize
                                         )
                                     }
-                                    debugLog { "processSchedule() Flow: counters after $packageName: backedUp=$backedUpCount, skipped=$skippedCount, finished=$finished/$queued" }
+                                    debugLog { "processSchedule() Flow: counters after $packageName: backedUp=${backedUpCount.get()}, skipped=${skippedCount.get()}, finished=${finished.get()}/$queued" }
 
                                     if (error.isNotEmpty()) {
                                         errors = "$errors$packageLabel: ${
@@ -302,20 +304,20 @@ class ScheduleWork(
                                     }
                                     resultsSuccess = resultsSuccess && succeeded
 
-                                    if (finished >= queued) {
-                                        debugLog { "processSchedule() Flow: finished >= queued ($finished >= $queued), setting finishSignal" }
+                                    if (finished.get() >= queued) {
+                                        debugLog { "processSchedule() Flow: finished >= queued (${finished.get()} >= $queued), setting finishSignal" }
                                         finishSignal.update { true }
                                         endSchedule(name, "all jobs finished")
                                         selectedItems.fastForEach {
                                             packageRepo.updatePackage(it)
                                         }
                                         // Log completion with actual statistics
-                                        debugLog { "processSchedule() calling writeScheduleEnd: backedUp=$backedUpCount, skipped=$skippedCount, size=$totalBackupSize" }
+                                        debugLog { "processSchedule() calling writeScheduleEnd: backedUp=${backedUpCount.get()}, skipped=${skippedCount.get()}, size=${totalBackupSize.get()}" }
                                         ScheduleLogHandler.writeScheduleEnd(
                                             scheduleName = name,
-                                            backedUpCount = backedUpCount,
-                                            skippedCount = skippedCount,
-                                            totalSizeBytes = totalBackupSize,
+                                            backedUpCount = backedUpCount.get(),
+                                            skippedCount = skippedCount.get(),
+                                            totalSizeBytes = totalBackupSize.get(),
                                             timestamp = java.time.LocalDateTime.now()
                                         )
                                         debugLog { "processSchedule() writeScheduleEnd COMPLETED" }
@@ -323,7 +325,7 @@ class ScheduleWork(
                                 }
 
                                 else                                   -> {
-                                    if (finished >= queued) {
+                                    if (finished.get() >= queued) {
                                         finishSignal.update { true }
                                         endSchedule(name, "all jobs finished")
                                         selectedItems.fastForEach {
@@ -349,9 +351,9 @@ class ScheduleWork(
                     val awaitElapsed = System.currentTimeMillis() - awaitStartTime
                     debugLog { "processSchedule() workJobs.awaitAll() RETURNED after ${awaitElapsed}ms" }
                     ScheduleStats(
-                        backedUpCount = backedUpCount,
-                        skippedCount = skippedCount,
-                        totalSize = totalBackupSize
+                        backedUpCount = backedUpCount.get(),
+                        skippedCount = skippedCount.get(),
+                        totalSize = totalBackupSize.get()
                     )
                 } else {
                     debugLog { "processSchedule() beginSchedule returned false (duplicate), returning null" }
