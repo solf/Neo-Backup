@@ -38,6 +38,7 @@ import com.machiav3lli.backup.data.preferences.pref_autoLogAfterSchedule
 import com.machiav3lli.backup.data.preferences.pref_autoLogSuspicious
 import com.machiav3lli.backup.data.preferences.traceSchedule
 import com.machiav3lli.backup.manager.handler.debugLog
+import com.machiav3lli.backup.manager.handler.getDebugStackTrace
 import com.machiav3lli.backup.manager.handler.LogsHandler
 import com.machiav3lli.backup.manager.handler.ScheduleLogHandler
 import com.machiav3lli.backup.manager.handler.WorkHandler
@@ -96,13 +97,17 @@ class ScheduleWork(
     private val scheduleJob = Job()
 
     override suspend fun getForegroundInfo(): ForegroundInfo {
+        debugLog { "[NOTIF-FOREGROUND] ScheduleWork.getForegroundInfo() ENTRY: scheduleId=$scheduleId, notificationId=$notificationId\n${getDebugStackTrace()}" }
         val notification = createForegroundNotification()
-        return ForegroundInfo(
+        val title = notification.extras?.getCharSequence("android.title")?.toString() ?: ""
+        val foregroundInfo = ForegroundInfo(
             notification.hashCode(),
             notification,
             if (Android.minSDK(Build.VERSION_CODES.Q)) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
             else 0
         )
+        debugLog { "[NOTIF-FOREGROUND] ScheduleWork.getForegroundInfo() returning ForegroundInfo: id=${notification.hashCode()}, scheduleId=$scheduleId, title='$title'" }
+        return foregroundInfo
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO + scheduleJob) {
@@ -211,7 +216,9 @@ class ScheduleWork(
             val worksList = mutableListOf<OneTimeWorkRequest>()
             val notificationManager =
                 context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            debugLog { "[NOTIF-CANCEL] ScheduleWork.processSchedule() canceling notification: id=$notificationId, scheduleId=$scheduleId\n${getDebugStackTrace()}" }
             notificationManager.cancel(notificationId)
+            debugLog { "[NOTIF-CANCEL] ScheduleWork.processSchedule() notification canceled: id=$notificationId" }
 
             val batchName = WorkHandler.getBatchName(name, now)
             get<WorkHandler>(WorkHandler::class.java).beginBatch(batchName)
@@ -457,7 +464,11 @@ class ScheduleWork(
 
     @Synchronized
     private fun createForegroundNotification(): Notification {
-        if (notification != null) return notification!!
+        debugLog { "[NOTIF-CREATE] ScheduleWork.createForegroundNotification() ENTRY: scheduleId=$scheduleId, notificationId=$notificationId, cached=${notification != null}\n${getDebugStackTrace()}" }
+        if (notification != null) {
+            debugLog { "[NOTIF-CREATE] ScheduleWork.createForegroundNotification() returning CACHED notification: scheduleId=$scheduleId" }
+            return notification!!
+        }
 
         if (pref_useForegroundInService.value) {
             createNotificationChannel()
@@ -482,6 +493,7 @@ class ScheduleWork(
             PendingIntent.FLAG_IMMUTABLE
         )
 
+        debugLog { "[NOTIF-CREATE] ScheduleWork.createForegroundNotification() building NEW notification: scheduleId=$scheduleId, channel=$CHANNEL_ID" }
         return NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentTitle(context.getString(R.string.sched_notificationMessage))
             .setSmallIcon(R.drawable.ic_launcher_foreground)
@@ -496,7 +508,11 @@ class ScheduleWork(
                 cancelPendingIntent
             )
             .build()
-            .also { notification = it }
+            .also {
+                notification = it
+                val title = it.extras?.getCharSequence("android.title")?.toString() ?: ""
+                debugLog { "[NOTIF-CREATE] ScheduleWork.createForegroundNotification() notification built and cached: scheduleId=$scheduleId, hashCode=${it.hashCode()}, title='$title'" }
+            }
     }
 
     private fun createNotificationChannel() {

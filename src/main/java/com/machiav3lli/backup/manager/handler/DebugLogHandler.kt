@@ -76,3 +76,5 @@ inline fun debugLog(lazyMessage: () -> String) {
     }
 }
 
+fun getDebugStackTrace(): String = Thread.currentThread().stackTrace
+    .drop(2).take(10).joinToString("\n") { "    at $it" }

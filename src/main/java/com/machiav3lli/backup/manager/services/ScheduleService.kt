@@ -37,6 +37,7 @@ import com.machiav3lli.backup.R
 import com.machiav3lli.backup.data.dbs.repository.ScheduleRepository
 import com.machiav3lli.backup.data.preferences.traceSchedule
 import com.machiav3lli.backup.manager.handler.debugLog
+import com.machiav3lli.backup.manager.handler.getDebugStackTrace
 import com.machiav3lli.backup.manager.handler.showNotification
 import com.machiav3lli.backup.manager.tasks.ScheduleWork
 import com.machiav3lli.backup.ui.activities.NeoActivity
@@ -71,8 +72,10 @@ open class ScheduleService : Service() {
         if (useForeground) {
             createNotificationChannel()
             createForegroundInfo()
+            val title = notification.extras?.getCharSequence("android.title")?.toString() ?: ""
+            debugLog { "[NOTIF-FOREGROUND] ScheduleService.onCreate() calling startForeground: id=${notification.hashCode()}, notificationId=$notificationId, title='$title'\n${getDebugStackTrace()}" }
             startForeground(notification.hashCode(), this.notification)
-            debugLog { "ScheduleService.onCreate() started as FOREGROUND service" }
+            debugLog { "[NOTIF-FOREGROUND] ScheduleService.onCreate() started as FOREGROUND service: id=${notification.hashCode()}, title='$title'" }
         }
 
         showNotification(
@@ -168,6 +171,7 @@ open class ScheduleService : Service() {
     }
 
     private fun createForegroundInfo() {
+        debugLog { "[NOTIF-CREATE] ScheduleService.createForegroundInfo() ENTRY: notificationId=$notificationId\n${getDebugStackTrace()}" }
         val contentPendingIntent = PendingIntent.getActivity(
             this,
             0,
@@ -183,6 +187,7 @@ open class ScheduleService : Service() {
             cancelIntent,
             PendingIntent.FLAG_IMMUTABLE
         )
+        debugLog { "[NOTIF-CREATE] ScheduleService.createForegroundInfo() building notification: channel=$CHANNEL_ID" }
         this.notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.sched_notificationMessage))
             .setSmallIcon(R.drawable.ic_launcher_foreground)
@@ -193,6 +198,8 @@ open class ScheduleService : Service() {
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .addAction(R.drawable.ic_close, getString(R.string.dialogCancel), cancelPendingIntent)
             .build()
+        val title = this.notification.extras?.getCharSequence("android.title")?.toString() ?: ""
+        debugLog { "[NOTIF-CREATE] ScheduleService.createForegroundInfo() notification created: hashCode=${this.notification.hashCode()}, title='$title'" }
     }
 
     open fun createNotificationChannel() {

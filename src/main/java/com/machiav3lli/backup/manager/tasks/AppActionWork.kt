@@ -44,7 +44,9 @@ import com.machiav3lli.backup.manager.handler.BackupRestoreHelper
 import com.machiav3lli.backup.manager.handler.LogsHandler
 import com.machiav3lli.backup.manager.handler.WorkHandler.Companion.getVar
 import com.machiav3lli.backup.manager.handler.WorkHandler.Companion.setVar
+import com.machiav3lli.backup.manager.handler.debugLog
 import com.machiav3lli.backup.manager.handler.getSpecial
+import com.machiav3lli.backup.manager.handler.getDebugStackTrace
 import com.machiav3lli.backup.manager.handler.showNotification
 import com.machiav3lli.backup.manager.services.CommandReceiver
 import com.machiav3lli.backup.ui.activities.NeoActivity
@@ -58,7 +60,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.withContext
 import timber.log.Timber
-
 
 class AppActionWork(val context: Context, workerParams: WorkerParameters) :
     CoroutineWorker(context, workerParams) {
@@ -84,10 +85,13 @@ class AppActionWork(val context: Context, workerParams: WorkerParameters) :
 
             NeoApp.wakelock(true)
 
-            if (pref_useForegroundInJob.value)               //TODO hg42 the service already does this?
-            //if (inputData.getBoolean("immediate", false))
+            if (pref_useForegroundInJob.value) {               //TODO hg42 the service already does this?
+                //if (inputData.getBoolean("immediate", false))
+                debugLog { "[NOTIF-FOREGROUND] AppActionWork.doWork() calling setForeground: packageName=$packageName, notificationId=$notificationId\n${getDebugStackTrace()}" }
                 setForeground(getForegroundInfo())
-            //setForegroundAsync(getForegroundInfo())  //TODO hg42 what's the difference?
+                debugLog { "[NOTIF-FOREGROUND] AppActionWork.doWork() setForeground completed: packageName=$packageName" }
+                //setForegroundAsync(getForegroundInfo())  //TODO hg42 what's the difference?
+            }
 
             var actionResult: ActionResult? = null
 
@@ -219,6 +223,7 @@ class AppActionWork(val context: Context, workerParams: WorkerParameters) :
 
 
     override suspend fun getForegroundInfo(): ForegroundInfo {
+        debugLog { "[NOTIF-FOREGROUND] AppActionWork.getForegroundInfo() ENTRY: packageName=$packageName, notificationId=$notificationId, backupBoolean=$backupBoolean\n${getDebugStackTrace()}" }
         val contentPendingIntent = PendingIntent.getActivity(
             context, 0,
             Intent(context, NeoActivity::class.java),
@@ -239,6 +244,7 @@ class AppActionWork(val context: Context, workerParams: WorkerParameters) :
 
         createNotificationChannel()
 
+        debugLog { "[NOTIF-CREATE] AppActionWork.getForegroundInfo() building notification: packageName=$packageName, channel=$CHANNEL_ID" }
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentTitle(
                 when {
@@ -259,12 +265,15 @@ class AppActionWork(val context: Context, workerParams: WorkerParameters) :
             )
             .build()
 
-        return ForegroundInfo(
+        val title = notification.extras?.getCharSequence("android.title")?.toString() ?: ""
+        val foregroundInfo = ForegroundInfo(
             this.notificationId + 1,
             notification,
             if (Android.minSDK(Build.VERSION_CODES.Q)) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
             else 0
         )
+        debugLog { "[NOTIF-FOREGROUND] AppActionWork.getForegroundInfo() returning ForegroundInfo: id=${this.notificationId + 1}, packageName=$packageName, title='$title'" }
+        return foregroundInfo
     }
 
     private fun createNotificationChannel() {

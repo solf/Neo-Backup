@@ -159,11 +159,16 @@ class WorkHandler(
     }
 
     @SuppressLint("MissingPermission")
-    fun notify(notificationId: Int, notification: Notification) =
+    fun notify(notificationId: Int, notification: Notification) {
+        val title = notification.extras?.getCharSequence("android.title")?.toString() ?: ""
+        val text = notification.extras?.getCharSequence("android.text")?.toString() ?: ""
+        debugLog { "[NOTIF-POST] WorkHandler.notify() posting notification: id=$notificationId, title='$title', text='$text'\n${getDebugStackTrace()}" }
         notificationManager.notify(
             notificationId,
             notification,
         )
+        debugLog { "[NOTIF-POST] WorkHandler.notify() notification posted successfully: id=$notificationId, title='$title'" }
+    }
 
     companion object {
 
