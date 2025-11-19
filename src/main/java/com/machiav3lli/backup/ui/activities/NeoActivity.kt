@@ -58,6 +58,7 @@ import com.machiav3lli.backup.data.dbs.repository.PackageRepository
 import com.machiav3lli.backup.data.dbs.repository.ScheduleRepository
 import com.machiav3lli.backup.manager.handler.LogsHandler
 import com.machiav3lli.backup.manager.handler.LogsHandler.Companion.unexpectedException
+import com.machiav3lli.backup.manager.handler.generateUniqueNotificationId
 import com.machiav3lli.backup.manager.handler.ShellHandler
 import com.machiav3lli.backup.manager.handler.WorkHandler
 import com.machiav3lli.backup.manager.handler.findBackups
@@ -449,7 +450,7 @@ class NeoActivity : BaseActivity() {
         selectedModes: List<Int>,
     ) {
         val now = SystemUtils.now
-        val notificationId = now.toInt()
+        val notificationId = generateUniqueNotificationId()
         val batchType = getString(if (backupBoolean) R.string.backup else R.string.restore)
         val batchName = WorkHandler.getBatchName(batchType, now)
         val workManager = get<WorkManager>(WorkManager::class.java)
@@ -521,7 +522,7 @@ class NeoActivity : BaseActivity() {
         selectedData: Map<String, Int>,
     ) {
         val now = SystemUtils.now
-        val notificationId = now.toInt()
+        val notificationId = generateUniqueNotificationId()
         val batchType = getString(R.string.restore)
         val batchName = WorkHandler.getBatchName(batchType, now)
         val workManager = get<WorkManager>(WorkManager::class.java)

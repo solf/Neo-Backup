@@ -27,6 +27,7 @@ import com.machiav3lli.backup.data.dbs.repository.AppExtrasRepository
 import com.machiav3lli.backup.data.dbs.repository.PackageRepository
 import com.machiav3lli.backup.data.entity.Package
 import com.machiav3lli.backup.manager.handler.BackupRestoreHelper
+import com.machiav3lli.backup.manager.handler.generateUniqueNotificationId
 import com.machiav3lli.backup.manager.handler.ShellCommands.Companion.currentProfile
 import com.machiav3lli.backup.manager.handler.showNotification
 import com.machiav3lli.backup.ui.activities.NeoActivity
@@ -73,7 +74,7 @@ class AppVM(
     val snackbarText: StateFlow<String>
         private field = MutableStateFlow("")
 
-    private var notificationId: Int = SystemUtils.now.toInt()
+    private var notificationId: Int = generateUniqueNotificationId()
     val dismissNow = mutableStateOf(false)
 
     fun setApp(pn: String) {

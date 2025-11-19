@@ -39,6 +39,7 @@ import com.machiav3lli.backup.data.preferences.pref_autoLogAfterSchedule
 import com.machiav3lli.backup.data.preferences.pref_autoLogSuspicious
 import com.machiav3lli.backup.data.preferences.traceSchedule
 import com.machiav3lli.backup.manager.handler.debugLog
+import com.machiav3lli.backup.manager.handler.generateUniqueNotificationId
 import com.machiav3lli.backup.manager.handler.getDebugStackTrace
 import com.machiav3lli.backup.manager.handler.LogsHandler
 import com.machiav3lli.backup.manager.handler.ScheduleLogHandler
@@ -94,8 +95,8 @@ class ScheduleWork(
     private val appExtrasRepo: AppExtrasRepository by inject()
 
     private var scheduleId = inputData.getLong(EXTRA_SCHEDULE_ID, -1L)
-    private val notificationId = SystemUtils.now.toInt()
-    private val fetchingNotificationId = SystemUtils.now.toInt()
+    private val notificationId = generateUniqueNotificationId()
+    private val fetchingNotificationId = generateUniqueNotificationId()
     private var notification: Notification? = null
     private val scheduleJob = Job()
 

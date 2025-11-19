@@ -28,6 +28,7 @@ import android.provider.Telephony
 import android.telephony.SmsMessage
 import androidx.core.content.PermissionChecker
 import com.machiav3lli.backup.ui.activities.NeoActivity
+import com.machiav3lli.backup.manager.handler.generateUniqueNotificationId
 import com.machiav3lli.backup.manager.handler.showNotification
 import com.machiav3lli.backup.utils.SystemUtils
 
@@ -57,7 +58,7 @@ class SmsReceiver : BroadcastReceiver() {
     private fun putSmsToDatabase(context: Context, sms: SmsMessage) {
         val contentResolver = context.contentResolver
         val values = ContentValues()
-        val notificationId = SystemUtils.now
+        val notificationId = generateUniqueNotificationId()
         val message = sms.displayMessageBody.toString()
         var sender = sms.displayOriginatingAddress ?: ""
         val threadId = Telephony.Threads.getOrCreateThreadId(context, sms.displayOriginatingAddress)
@@ -89,7 +90,7 @@ class SmsReceiver : BroadcastReceiver() {
         values.put( Telephony.Sms.SUBJECT, sms.pseudoSubject)
         contentResolver.insert( Telephony.Sms.CONTENT_URI, values )
         showNotification(
-            context, NeoActivity::class.java, notificationId.toInt(),
+            context, NeoActivity::class.java, notificationId,
                 sender, message, true
         )
     }

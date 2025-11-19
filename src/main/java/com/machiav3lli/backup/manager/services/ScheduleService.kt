@@ -37,6 +37,7 @@ import com.machiav3lli.backup.R
 import com.machiav3lli.backup.data.dbs.repository.ScheduleRepository
 import com.machiav3lli.backup.data.preferences.traceSchedule
 import com.machiav3lli.backup.manager.handler.debugLog
+import com.machiav3lli.backup.manager.handler.generateUniqueNotificationId
 import com.machiav3lli.backup.manager.handler.getDebugStackTrace
 import com.machiav3lli.backup.manager.handler.showNotification
 import com.machiav3lli.backup.manager.tasks.ScheduleWork
@@ -66,7 +67,7 @@ open class ScheduleService : Service() {
         NeoApp.wakelock(true)
         traceSchedule { "%%%%% ############################################################ ScheduleService create" }
         super.onCreate()
-        this.notificationId = SystemUtils.now.toInt()
+        this.notificationId = generateUniqueNotificationId()
 
         val useForeground = pref_useForegroundInService.value
         debugLog { "ScheduleService.onCreate() useForegroundInService=$useForeground, notificationId=$notificationId" }

@@ -6,6 +6,7 @@ import com.machiav3lli.backup.data.dbs.DB
 import com.machiav3lli.backup.data.dbs.entity.Schedule
 import com.machiav3lli.backup.data.entity.StorageFile
 import com.machiav3lli.backup.manager.handler.ExportsHandler
+import com.machiav3lli.backup.manager.handler.generateUniqueNotificationId
 import com.machiav3lli.backup.manager.handler.showNotification
 import com.machiav3lli.backup.ui.activities.NeoActivity
 import com.machiav3lli.backup.utils.SystemUtils
@@ -26,7 +27,7 @@ class ExportsRepository(
                 .build()
         )
         showNotification(
-            appContext, NeoActivity::class.java, SystemUtils.now.toInt(),
+            appContext, NeoActivity::class.java, generateUniqueNotificationId(),
             appContext.getString(R.string.sched_imported), schedule.name, false
         )
     }

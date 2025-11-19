@@ -31,6 +31,7 @@ import com.machiav3lli.backup.data.entity.Package
 import com.machiav3lli.backup.data.entity.Pref
 import com.machiav3lli.backup.manager.handler.BackupRestoreHelper
 import com.machiav3lli.backup.manager.handler.findBackups
+import com.machiav3lli.backup.manager.handler.generateUniqueNotificationId
 import com.machiav3lli.backup.manager.handler.showNotification
 import com.machiav3lli.backup.ui.activities.NeoActivity
 import com.machiav3lli.backup.ui.compose.component.InnerBackground
@@ -280,7 +281,7 @@ private fun Context.onClickUninstalledBackupsDelete(
 }
 
 private fun Context.deleteBackups(deleteList: List<Package>) {
-    val notificationId = SystemUtils.now.toInt()
+    val notificationId = generateUniqueNotificationId()
     deleteList.forEachIndexed { i, ai ->
         showNotification(
             this,
@@ -399,7 +400,7 @@ private fun Context.onClickCopySelf(
                 showNotification(
                     this@onClickCopySelf,
                     NeoActivity::class.java,
-                    SystemUtils.now.toInt(),
+                    generateUniqueNotificationId(),
                     getString(R.string.copyOwnApkSuccess),
                     "",
                     false
@@ -412,7 +413,7 @@ private fun Context.onClickCopySelf(
                 showNotification(
                     this@onClickCopySelf,
                     NeoActivity::class.java,
-                    SystemUtils.now.toInt(),
+                    generateUniqueNotificationId(),
                     getString(R.string.copyOwnApkFailed),
                     "",
                     false
@@ -489,7 +490,7 @@ fun Context.writeAppsListFile(appsList: List<String>, filteredBoolean: Boolean) 
         BufferedOutputStream(listFile.outputStream())
             .use { it.write(filesText.toByteArray(StandardCharsets.UTF_8)) }
         showNotification(
-            this, NeoActivity::class.java, SystemUtils.now.toInt(),
+            this, NeoActivity::class.java, generateUniqueNotificationId(),
             getString(
                 if (filteredBoolean) R.string.write_apps_list_filtered
                 else R.string.write_apps_list_all

@@ -20,6 +20,7 @@ package com.machiav3lli.backup.manager.tasks
 import com.machiav3lli.backup.NeoApp
 import com.machiav3lli.backup.ui.activities.NeoActivity
 import com.machiav3lli.backup.manager.handler.BackupRestoreHelper
+import com.machiav3lli.backup.manager.handler.generateUniqueNotificationId
 import com.machiav3lli.backup.manager.handler.ShellHandler
 import com.machiav3lli.backup.data.entity.ActionResult
 import com.machiav3lli.backup.data.entity.Package
@@ -43,7 +44,7 @@ class BackupActionTask(
 
         val time = measureTimeMillis {
 
-            notificationId = SystemUtils.now.toInt()
+            notificationId = generateUniqueNotificationId()
             publishProgress()
 
             result = BackupRestoreHelper.backup(mainActivityX, null, shellHandler, app, mode)

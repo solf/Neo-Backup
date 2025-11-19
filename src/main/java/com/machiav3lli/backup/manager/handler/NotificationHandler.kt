@@ -29,6 +29,26 @@ import com.machiav3lli.backup.R
 import com.machiav3lli.backup.ui.activities.BaseActivity
 import com.machiav3lli.backup.classAddress
 import com.machiav3lli.backup.utils.SystemUtils
+import java.util.concurrent.atomic.AtomicInteger
+
+private val lastNotificationId = AtomicInteger(0)
+
+/**
+ * Generates a unique notification ID that is guaranteed to be different from all previous IDs.
+ * 
+ * Uses current system time in milliseconds as base, but if time hasn't advanced since last call,
+ * increments the previous value to ensure uniqueness. Thread-safe.
+ * 
+ * @return A unique integer notification ID
+ */
+fun generateUniqueNotificationId(): Int {
+    val currentTime = SystemUtils.now.toInt()
+    
+    // Atomically update: use currentTime if it's greater, otherwise increment last value
+    return lastNotificationId.updateAndGet { lastValue ->
+        if (currentTime > lastValue) currentTime else lastValue + 1
+    }
+}
 
 fun showNotification(
     context: Context?,

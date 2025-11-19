@@ -22,6 +22,7 @@ import com.machiav3lli.backup.data.dbs.entity.Backup
 import com.machiav3lli.backup.data.entity.ActionResult
 import com.machiav3lli.backup.data.entity.Package
 import com.machiav3lli.backup.manager.handler.BackupRestoreHelper
+import com.machiav3lli.backup.manager.handler.generateUniqueNotificationId
 import com.machiav3lli.backup.manager.handler.ShellHandler
 import com.machiav3lli.backup.utils.SystemUtils
 
@@ -38,7 +39,7 @@ class RestoreActionTask(
         if (mainActivityX == null || mainActivityX.isFinishing) {
             return ActionResult(app, backup, "", false)
         }
-        notificationId = SystemUtils.now.toInt()
+        notificationId = generateUniqueNotificationId()
         publishProgress()
         result = BackupRestoreHelper.restore(
             mainActivityX, null, shellHandler,
