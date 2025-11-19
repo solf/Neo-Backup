@@ -162,7 +162,7 @@ class WorkHandler(
     fun notify(notificationId: Int, notification: Notification) {
         val title = notification.extras?.getCharSequence("android.title")?.toString() ?: ""
         val text = notification.extras?.getCharSequence("android.text")?.toString() ?: ""
-        debugLog { "[NOTIF-POST] WorkHandler.notify() posting notification: id=$notificationId, title='$title', text='$text'\n${getDebugStackTrace()}" }
+        debugLog { "[NOTIF-POST] WorkHandler.notify() posting notification: id=$notificationId, title='$title', text='$text' | ${getCompactStackTrace()}" }
         notificationManager.notify(
             notificationId,
             notification,

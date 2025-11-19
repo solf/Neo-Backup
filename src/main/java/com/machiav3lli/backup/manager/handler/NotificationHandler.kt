@@ -67,7 +67,7 @@ fun showNotification(
     bigText: String,
     autoCancel: Boolean
 ) {
-    debugLog { "[NOTIF-CREATE] showNotification() ENTRY: id=$id, title='$title', text='$text', autoCancel=$autoCancel\n${getDebugStackTrace()}" }
+    debugLog { "[NOTIF-CREATE] showNotification() ENTRY: id=$id, title='$title', text='$text', autoCancel=$autoCancel | ${getCompactStackTrace()}" }
     val resultIntent = Intent(context, parentActivity)
     resultIntent.flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
     val resultPendingIntent = PendingIntent.getActivity(
@@ -96,7 +96,7 @@ fun showNotification(
         .setAutoCancel(autoCancel)
         .setContentIntent(resultPendingIntent)
         .build()
-    debugLog { "[NOTIF-POST] showNotification() posting notification: id=$id\n${getDebugStackTrace()}" }
+    debugLog { "[NOTIF-POST] showNotification() posting notification: id=$id | ${getCompactStackTrace()}" }
     notificationManager.notify(id, notification)
     debugLog { "[NOTIF-POST] showNotification() notification posted successfully: id=$id" }
 }

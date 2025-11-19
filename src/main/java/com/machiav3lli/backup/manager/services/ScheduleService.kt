@@ -38,7 +38,7 @@ import com.machiav3lli.backup.data.dbs.repository.ScheduleRepository
 import com.machiav3lli.backup.data.preferences.traceSchedule
 import com.machiav3lli.backup.manager.handler.debugLog
 import com.machiav3lli.backup.manager.handler.generateUniqueNotificationId
-import com.machiav3lli.backup.manager.handler.getDebugStackTrace
+import com.machiav3lli.backup.manager.handler.getCompactStackTrace
 import com.machiav3lli.backup.manager.handler.showNotification
 import com.machiav3lli.backup.manager.tasks.ScheduleWork
 import com.machiav3lli.backup.ui.activities.NeoActivity
@@ -75,7 +75,7 @@ open class ScheduleService : Service() {
             createNotificationChannel()
             createForegroundInfo()
             val title = notification.extras?.getCharSequence("android.title")?.toString() ?: ""
-            debugLog { "[NOTIF-FOREGROUND] ScheduleService.onCreate() calling startForeground: id=${notification.hashCode()}, notificationId=$notificationId, title='$title'\n${getDebugStackTrace()}" }
+            debugLog { "[NOTIF-FOREGROUND] ScheduleService.onCreate() calling startForeground: id=${notification.hashCode()}, notificationId=$notificationId, title='$title' | ${getCompactStackTrace()}" }
             startForeground(notification.hashCode(), this.notification)
             debugLog { "[NOTIF-FOREGROUND] ScheduleService.onCreate() started as FOREGROUND service: id=${notification.hashCode()}, title='$title'" }
         }
@@ -175,7 +175,7 @@ open class ScheduleService : Service() {
     }
 
     private fun createForegroundInfo() {
-        debugLog { "[NOTIF-CREATE] ScheduleService.createForegroundInfo() ENTRY: notificationId=$notificationId\n${getDebugStackTrace()}" }
+        debugLog { "[NOTIF-CREATE] ScheduleService.createForegroundInfo() ENTRY: notificationId=$notificationId | ${getCompactStackTrace()}" }
         val contentPendingIntent = PendingIntent.getActivity(
             this,
             0,

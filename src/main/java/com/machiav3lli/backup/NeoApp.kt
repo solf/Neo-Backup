@@ -58,7 +58,7 @@ import com.machiav3lli.backup.manager.handler.PGPHandler
 import com.machiav3lli.backup.manager.handler.ShellHandler
 import com.machiav3lli.backup.manager.handler.WorkHandler
 import com.machiav3lli.backup.manager.handler.debugLog
-import com.machiav3lli.backup.manager.handler.getDebugStackTrace
+import com.machiav3lli.backup.manager.handler.getCompactStackTrace
 import com.machiav3lli.backup.manager.services.PackageUnInstalledReceiver
 import com.machiav3lli.backup.ui.activities.NeoActivity
 import com.machiav3lli.backup.ui.activities.viewModelsModule
@@ -571,7 +571,7 @@ class NeoApp : Application(), KoinStartup {
                     }
                     
                     traceDebug { "%%%%% $WAKELOCK_TAG acquire: $before→$after ${if (actuallyAcquired) "ACQUIRED" else "ref-count"}" }
-                    debugLog { "[WAKELOCK] acquire: $before→$after ${if (actuallyAcquired) "ACQUIRED" else "ref-count"}\n${getDebugStackTrace()}" }
+                    debugLog { "[WAKELOCK] acquire: $before→$after ${if (actuallyAcquired) "ACQUIRED" else "ref-count"} | ${getCompactStackTrace()}" }
                 } else {
                     val after = wakeLockNested.accumulateAndGet(-1, Int::plus)
                     val before = after + 1
@@ -582,7 +582,7 @@ class NeoApp : Application(), KoinStartup {
                     }
                     
                     traceDebug { "%%%%% $WAKELOCK_TAG release: $before→$after ${if (actuallyReleased) "RELEASED" else "ref-count"}" }
-                    debugLog { "[WAKELOCK] release: $before→$after ${if (actuallyReleased) "RELEASED" else "ref-count"}\n${getDebugStackTrace()}" }
+                    debugLog { "[WAKELOCK] release: $before→$after ${if (actuallyReleased) "RELEASED" else "ref-count"} | ${getCompactStackTrace()}" }
                 }
             }
         }

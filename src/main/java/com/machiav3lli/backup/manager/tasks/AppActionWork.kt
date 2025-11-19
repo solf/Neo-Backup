@@ -47,7 +47,7 @@ import com.machiav3lli.backup.manager.handler.WorkHandler.Companion.getVar
 import com.machiav3lli.backup.manager.handler.WorkHandler.Companion.setVar
 import com.machiav3lli.backup.manager.handler.debugLog
 import com.machiav3lli.backup.manager.handler.getSpecial
-import com.machiav3lli.backup.manager.handler.getDebugStackTrace
+import com.machiav3lli.backup.manager.handler.getCompactStackTrace
 import com.machiav3lli.backup.manager.handler.showNotification
 import com.machiav3lli.backup.manager.services.CommandReceiver
 import com.machiav3lli.backup.ui.activities.NeoActivity
@@ -88,7 +88,7 @@ class AppActionWork(val context: Context, workerParams: WorkerParameters) :
 
             if (pref_useForegroundInJob.value && !USE_CENTRALIZED_FOREGROUND_INSTEAD_OF_LEGACY) {               //TODO hg42 the service already does this?
                 //if (inputData.getBoolean("immediate", false))
-                debugLog { "[NOTIF-FOREGROUND] AppActionWork.doWork() calling setForeground: packageName=$packageName, notificationId=$notificationId\n${getDebugStackTrace()}" }
+                debugLog { "[NOTIF-FOREGROUND] AppActionWork.doWork() calling setForeground: packageName=$packageName, notificationId=$notificationId | ${getCompactStackTrace()}" }
                 setForeground(getForegroundInfo())
                 debugLog { "[NOTIF-FOREGROUND] AppActionWork.doWork() setForeground completed: packageName=$packageName" }
                 //setForegroundAsync(getForegroundInfo())  //TODO hg42 what's the difference?
@@ -224,7 +224,7 @@ class AppActionWork(val context: Context, workerParams: WorkerParameters) :
 
 
     override suspend fun getForegroundInfo(): ForegroundInfo {
-        debugLog { "[NOTIF-FOREGROUND] AppActionWork.getForegroundInfo() ENTRY: packageName=$packageName, notificationId=$notificationId, backupBoolean=$backupBoolean\n${getDebugStackTrace()}" }
+        debugLog { "[NOTIF-FOREGROUND] AppActionWork.getForegroundInfo() ENTRY: packageName=$packageName, notificationId=$notificationId, backupBoolean=$backupBoolean | ${getCompactStackTrace()}" }
         val contentPendingIntent = PendingIntent.getActivity(
             context, 0,
             Intent(context, NeoActivity::class.java),

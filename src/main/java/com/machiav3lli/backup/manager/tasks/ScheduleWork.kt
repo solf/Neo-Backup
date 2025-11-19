@@ -40,7 +40,7 @@ import com.machiav3lli.backup.data.preferences.pref_autoLogSuspicious
 import com.machiav3lli.backup.data.preferences.traceSchedule
 import com.machiav3lli.backup.manager.handler.debugLog
 import com.machiav3lli.backup.manager.handler.generateUniqueNotificationId
-import com.machiav3lli.backup.manager.handler.getDebugStackTrace
+import com.machiav3lli.backup.manager.handler.getCompactStackTrace
 import com.machiav3lli.backup.manager.handler.LogsHandler
 import com.machiav3lli.backup.manager.handler.ScheduleLogHandler
 import com.machiav3lli.backup.manager.handler.WorkHandler
@@ -101,7 +101,7 @@ class ScheduleWork(
     private val scheduleJob = Job()
 
     override suspend fun getForegroundInfo(): ForegroundInfo {
-        debugLog { "[NOTIF-FOREGROUND] ScheduleWork.getForegroundInfo() ENTRY: scheduleId=$scheduleId, notificationId=$notificationId\n${getDebugStackTrace()}" }
+        debugLog { "[NOTIF-FOREGROUND] ScheduleWork.getForegroundInfo() ENTRY: scheduleId=$scheduleId, notificationId=$notificationId | ${getCompactStackTrace()}" }
         val notification = createForegroundNotification()
         val title = notification.extras?.getCharSequence("android.title")?.toString() ?: ""
         val foregroundInfo = ForegroundInfo(
@@ -240,7 +240,7 @@ class ScheduleWork(
             val worksList = mutableListOf<OneTimeWorkRequest>()
             val notificationManager =
                 context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            debugLog { "[NOTIF-CANCEL] ScheduleWork.processSchedule() canceling fetching notification: id=$fetchingNotificationId, scheduleId=$scheduleId\n${getDebugStackTrace()}" }
+            debugLog { "[NOTIF-CANCEL] ScheduleWork.processSchedule() canceling fetching notification: id=$fetchingNotificationId, scheduleId=$scheduleId | ${getCompactStackTrace()}" }
             notificationManager.cancel(fetchingNotificationId)
             debugLog { "[NOTIF-CANCEL] ScheduleWork.processSchedule() fetching notification canceled: id=$fetchingNotificationId" }
 
@@ -488,7 +488,7 @@ class ScheduleWork(
 
     @Synchronized
     private fun createForegroundNotification(): Notification {
-        debugLog { "[NOTIF-CREATE] ScheduleWork.createForegroundNotification() ENTRY: scheduleId=$scheduleId, notificationId=$notificationId, cached=${notification != null}\n${getDebugStackTrace()}" }
+        debugLog { "[NOTIF-CREATE] ScheduleWork.createForegroundNotification() ENTRY: scheduleId=$scheduleId, notificationId=$notificationId, cached=${notification != null} | ${getCompactStackTrace()}" }
         if (notification != null) {
             debugLog { "[NOTIF-CREATE] ScheduleWork.createForegroundNotification() returning CACHED notification: scheduleId=$scheduleId" }
             return notification!!
