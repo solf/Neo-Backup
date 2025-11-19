@@ -73,6 +73,7 @@ class AppActionWork(val context: Context, workerParams: WorkerParameters) :
     private var notificationId: Int = inputData.getInt("notificationId", 123454321)
     private var failures = getVar(batchName, packageName, "failures")?.toInt() ?: 0
     private var backupModifiedOnly = inputData.getBoolean("backupModifiedOnly", false)
+    private var foregroundInfo: ForegroundInfo? = null
 
     init {
         setOperation("")
@@ -88,9 +89,9 @@ class AppActionWork(val context: Context, workerParams: WorkerParameters) :
 
             if (pref_useForegroundInJob.value && !USE_CENTRALIZED_FOREGROUND_INSTEAD_OF_LEGACY) {               //TODO hg42 the service already does this?
                 //if (inputData.getBoolean("immediate", false))
-                debugLog { "[NOTIF-FOREGROUND] AppActionWork.doWork() calling setForeground: packageName=$packageName, notificationId=$notificationId | ${getCompactStackTrace()}" }
+                debugLog { "[NOTIF-SHOW] AppActionWork.doWork() SHOWING foreground notification: packageName=$packageName, notificationId=$notificationId | ${getCompactStackTrace()}" }
                 setForeground(getForegroundInfo())
-                debugLog { "[NOTIF-FOREGROUND] AppActionWork.doWork() setForeground completed: packageName=$packageName" }
+                debugLog { "[NOTIF-SHOW] AppActionWork.doWork() foreground notification SHOWN: packageName=$packageName" }
                 //setForegroundAsync(getForegroundInfo())  //TODO hg42 what's the difference?
             }
 
@@ -224,7 +225,11 @@ class AppActionWork(val context: Context, workerParams: WorkerParameters) :
 
 
     override suspend fun getForegroundInfo(): ForegroundInfo {
-        debugLog { "[NOTIF-FOREGROUND] AppActionWork.getForegroundInfo() ENTRY: packageName=$packageName, notificationId=$notificationId, backupBoolean=$backupBoolean | ${getCompactStackTrace()}" }
+        // Check cache first - no logging on cache hit
+        if (foregroundInfo != null) {
+            return foregroundInfo!!
+        }
+
         val contentPendingIntent = PendingIntent.getActivity(
             context, 0,
             Intent(context, NeoActivity::class.java),
@@ -245,7 +250,6 @@ class AppActionWork(val context: Context, workerParams: WorkerParameters) :
 
         createNotificationChannel()
 
-        debugLog { "[NOTIF-CREATE] AppActionWork.getForegroundInfo() building notification: packageName=$packageName, channel=$CHANNEL_ID" }
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentTitle(
                 when {
@@ -266,15 +270,14 @@ class AppActionWork(val context: Context, workerParams: WorkerParameters) :
             )
             .build()
 
-        val title = notification.extras?.getCharSequence("android.title")?.toString() ?: ""
-        val foregroundInfo = ForegroundInfo(
-            this.notificationId + 1,
+        // Cache and return
+        foregroundInfo = ForegroundInfo(
+            this.notificationId,
             notification,
             if (Android.minSDK(Build.VERSION_CODES.Q)) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
             else 0
         )
-        debugLog { "[NOTIF-FOREGROUND] AppActionWork.getForegroundInfo() returning ForegroundInfo: id=${this.notificationId + 1}, packageName=$packageName, title='$title'" }
-        return foregroundInfo
+        return foregroundInfo!!
     }
 
     private fun createNotificationChannel() {
