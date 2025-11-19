@@ -559,10 +559,9 @@ class NeoApp : Application(), KoinStartup {
         // e.g. from the receiver to the service
         fun wakelock(aquire: Boolean) {
             if (aquire) {
-                val stackTrace = getDebugStackTrace()
                 val before = wakeLockNested.get()
                 traceDebug { "%%%%% $WAKELOCK_TAG wakelock aquire (before: $before)" }
-                debugLog { "[WAKELOCK] acquire() called: counter BEFORE=$before\n$stackTrace" }
+                debugLog { "[WAKELOCK] acquire() called: counter BEFORE=$before\n${getDebugStackTrace()}" }
                 
                 if (wakeLockNested.accumulateAndGet(+1, Int::plus) == 1) {
                     val pm: PowerManager = get(PowerManager::class.java)
@@ -574,10 +573,9 @@ class NeoApp : Application(), KoinStartup {
                     debugLog { "[WAKELOCK] incremented reference count: counter now=${wakeLockNested.get()}" }
                 }
             } else {
-                val stackTrace = getDebugStackTrace()
                 val before = wakeLockNested.get()
                 traceDebug { "%%%%% $WAKELOCK_TAG wakelock release (before: $before)" }
-                debugLog { "[WAKELOCK] release() called: counter BEFORE=$before\n$stackTrace" }
+                debugLog { "[WAKELOCK] release() called: counter BEFORE=$before\n${getDebugStackTrace()}" }
                 
                 if (wakeLockNested.accumulateAndGet(-1, Int::plus) == 0) {
                     traceDebug { "%%%%% $WAKELOCK_TAG wakelock RELEASING" }
