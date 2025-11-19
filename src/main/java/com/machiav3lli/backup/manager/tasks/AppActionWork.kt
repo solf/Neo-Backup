@@ -38,6 +38,7 @@ import androidx.work.workDataOf
 import com.machiav3lli.backup.MODE_UNSET
 import com.machiav3lli.backup.NeoApp
 import com.machiav3lli.backup.R
+import com.machiav3lli.backup.USE_CENTRALIZED_FOREGROUND_INSTEAD_OF_LEGACY
 import com.machiav3lli.backup.data.entity.ActionResult
 import com.machiav3lli.backup.data.entity.Package
 import com.machiav3lli.backup.manager.handler.BackupRestoreHelper
@@ -85,7 +86,7 @@ class AppActionWork(val context: Context, workerParams: WorkerParameters) :
 
             NeoApp.wakelock(true)
 
-            if (pref_useForegroundInJob.value) {               //TODO hg42 the service already does this?
+            if (pref_useForegroundInJob.value && !USE_CENTRALIZED_FOREGROUND_INSTEAD_OF_LEGACY) {               //TODO hg42 the service already does this?
                 //if (inputData.getBoolean("immediate", false))
                 debugLog { "[NOTIF-FOREGROUND] AppActionWork.doWork() calling setForeground: packageName=$packageName, notificationId=$notificationId\n${getDebugStackTrace()}" }
                 setForeground(getForegroundInfo())

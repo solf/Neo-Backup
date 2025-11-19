@@ -28,6 +28,7 @@ import com.machiav3lli.backup.EXTRA_PERIODIC
 import com.machiav3lli.backup.EXTRA_SCHEDULE_ID
 import com.machiav3lli.backup.MODE_UNSET
 import com.machiav3lli.backup.NeoApp
+import com.machiav3lli.backup.USE_CENTRALIZED_FOREGROUND_INSTEAD_OF_LEGACY
 import com.machiav3lli.backup.R
 import com.machiav3lli.backup.data.dbs.entity.Schedule
 import com.machiav3lli.backup.data.dbs.repository.AppExtrasRepository
@@ -47,6 +48,7 @@ import com.machiav3lli.backup.manager.handler.showNotification
 import com.machiav3lli.backup.manager.services.CommandReceiver
 import com.machiav3lli.backup.ui.activities.NeoActivity
 import com.machiav3lli.backup.ui.pages.pref_fakeScheduleDups
+import com.machiav3lli.backup.ui.pages.pref_useForegroundInJob
 import com.machiav3lli.backup.ui.pages.pref_useForegroundInService
 import com.machiav3lli.backup.ui.pages.supportInfo
 import java.util.concurrent.atomic.AtomicInteger
@@ -116,6 +118,11 @@ class ScheduleWork(
             val name = inputData.getString(EXTRA_NAME) ?: ""
 
             debugLog { "ScheduleWork.doWork() ENTRY: scheduleId=$scheduleId, name='$name'" }
+
+            if (USE_CENTRALIZED_FOREGROUND_INSTEAD_OF_LEGACY && pref_useForegroundInJob.value) {
+                debugLog { "[NOTIF-FOREGROUND] ScheduleWork.doWork() setting foreground for entire schedule: scheduleId=$scheduleId" }
+                setForeground(getForegroundInfo())
+            }
 
             NeoApp.wakelock(true)
 

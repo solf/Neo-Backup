@@ -31,6 +31,11 @@ import com.machiav3lli.backup.utils.extensions.Android
 const val PREFS_SHARED_PRIVATE = "com.machiav3lli.backup"
 const val STATEFLOW_SUBSCRIBE_BUFFER = 60_000L // 1 minute buffer
 
+// 2025-11-19 Solf: When true, ScheduleWork provides centralized foreground protection for all child workers
+// instead of each worker calling setForeground() individually. This is the correct architecture
+// and intended to make the old per-worker logic obsolete once proven stable.
+const val USE_CENTRALIZED_FOREGROUND_INSTEAD_OF_LEGACY = true
+
 const val ADMIN_PREFIX = "!-"
 
 val COMPRESSION_TYPES = mapOf(
