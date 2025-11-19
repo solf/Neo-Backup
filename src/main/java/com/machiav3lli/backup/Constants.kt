@@ -36,6 +36,26 @@ const val STATEFLOW_SUBSCRIBE_BUFFER = 60_000L // 1 minute buffer
 // and intended to make the old per-worker logic obsolete once proven stable.
 const val USE_CENTRALIZED_FOREGROUND_INSTEAD_OF_LEGACY = true
 
+/**
+ * 2025-11-19 Solf:
+ * When true, disables per-worker wakelocks in AppActionWork since parent components
+ * (ScheduleWork for scheduled backups, WorkHandler for manual operations) already
+ * hold wakelocks that cover the workers' entire lifetime.
+ * 
+ * Rationale:
+ * - ScheduleWork: Acquires wakelock, enqueues workers, awaits completion via awaitAll(),
+ *   then releases. Workers run entirely within this protection.
+ * - WorkHandler: Acquires wakelock in beginBatch(), LiveData observer watches workers,
+ *   triggers endBatch() when remaining==0. Wakelock held throughout.
+ * 
+ * With redundant per-worker wakelocks: 400+ log entries per 200-app scheduled backup
+ * Without: ~10 log entries (only parent lifecycle)
+ * 
+ * Set to true to rely on centralized parent wakelocks (recommended).
+ * Set to false to keep legacy per-worker wakelocks (defensive redundancy).
+ */
+const val USE_CENTRALIZED_WAKELOCKS_INSTEAD_OF_PER_WORKER = true
+
 const val ADMIN_PREFIX = "!-"
 
 val COMPRESSION_TYPES = mapOf(
