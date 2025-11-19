@@ -300,7 +300,7 @@ private fun Context.deleteBackups(deleteList: List<Package>) {
         notificationId,
         getString(R.string.batchDeleteNotificationTitle),
         "${getString(R.string.batchDeleteBackupsDeleted)} ${deleteList.size}",
-        false
+        true  // Allow user to dismiss completion notification
     )
 }
 
