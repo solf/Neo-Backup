@@ -51,6 +51,7 @@ import com.machiav3lli.backup.utils.scheduleNextAlarm
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.java.KoinJavaComponent.get
 
@@ -78,17 +79,6 @@ open class ScheduleService : Service() {
             debugLog { "[NOTIF-FOREGROUND] ScheduleService.onCreate() started as FOREGROUND service: id=${notification.hashCode()}, title='$title'" }
         }
 
-        showNotification(
-            this.baseContext,
-            NeoActivity::class.java,
-            notificationId,
-            String.format(
-                getString(R.string.fetching_action_list),
-                getString(R.string.backup)
-            ),
-            "",
-            true
-        )
         debugLog { "ScheduleService.onCreate() EXIT: created notification" }
     }
 
@@ -165,6 +155,19 @@ open class ScheduleService : Service() {
 
         scheduleAlarmsOnce(this)
 
+        // Schedule service shutdown after giving WorkManager time to start
+        // WorkManager's expedited work typically starts within 1-2 seconds
+        // We wait 5 seconds to be safe, ensuring:
+        // - WorkManager has started ScheduleWork
+        // - ScheduleWork has acquired its own wakelock
+        // - Safe to release service's wakelock reference
+        // This prevents wakelock leaks while avoiding complex coordination
+        CoroutineScope(Dispatchers.IO).launch {
+            delay(5000)  // 5 second grace period
+            debugLog { "ScheduleService delayed shutdown: calling stopSelf() after grace period" }
+            stopSelf()
+        }
+
         NeoApp.wakelock(false)
         debugLog { "ScheduleService.onStartCommand() EXIT: returning START_NOT_STICKY" }
         return START_NOT_STICKY
@@ -189,12 +192,12 @@ open class ScheduleService : Service() {
         )
         debugLog { "[NOTIF-CREATE] ScheduleService.createForegroundInfo() building notification: channel=$CHANNEL_ID" }
         this.notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(getString(R.string.sched_notificationMessage))
+            .setContentTitle(getString(R.string.sched_starting_message))
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setOngoing(true)
             .setSilent(true)
             .setContentIntent(contentPendingIntent)
-            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .addAction(R.drawable.ic_close, getString(R.string.dialogCancel), cancelPendingIntent)
             .build()

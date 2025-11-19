@@ -95,6 +95,7 @@ class ScheduleWork(
 
     private var scheduleId = inputData.getLong(EXTRA_SCHEDULE_ID, -1L)
     private val notificationId = SystemUtils.now.toInt()
+    private val fetchingNotificationId = SystemUtils.now.toInt()
     private var notification: Notification? = null
     private val scheduleJob = Job()
 
@@ -199,6 +200,21 @@ class ScheduleWork(
     private suspend fun processSchedule(name: String, now: Long): ScheduleStats? =
         coroutineScope {
             debugLog { "processSchedule() ENTRY: name='$name', now=$now, scheduleId=$scheduleId" }
+            
+            // Show "Fetching apps list" notification while building package list
+            showNotification(
+                context,
+                NeoActivity::class.java,
+                fetchingNotificationId,
+                String.format(
+                    context.getString(R.string.fetching_action_list),
+                    context.getString(R.string.backup)
+                ),
+                "",
+                true
+            )
+            debugLog { "[NOTIF-CREATE] processSchedule() posted 'Fetching...' notification: id=$fetchingNotificationId" }
+            
             val finishSignal = MutableStateFlow(false)
             val schedule = scheduleRepo.getSchedule(scheduleId)
             debugLog { "processSchedule() getSchedule: schedule=${if (schedule != null) "found" else "NULL"}" }
@@ -223,9 +239,9 @@ class ScheduleWork(
             val worksList = mutableListOf<OneTimeWorkRequest>()
             val notificationManager =
                 context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            debugLog { "[NOTIF-CANCEL] ScheduleWork.processSchedule() canceling notification: id=$notificationId, scheduleId=$scheduleId\n${getDebugStackTrace()}" }
-            notificationManager.cancel(notificationId)
-            debugLog { "[NOTIF-CANCEL] ScheduleWork.processSchedule() notification canceled: id=$notificationId" }
+            debugLog { "[NOTIF-CANCEL] ScheduleWork.processSchedule() canceling fetching notification: id=$fetchingNotificationId, scheduleId=$scheduleId\n${getDebugStackTrace()}" }
+            notificationManager.cancel(fetchingNotificationId)
+            debugLog { "[NOTIF-CANCEL] ScheduleWork.processSchedule() fetching notification canceled: id=$fetchingNotificationId" }
 
             val batchName = WorkHandler.getBatchName(name, now)
             get<WorkHandler>(WorkHandler::class.java).beginBatch(batchName)
