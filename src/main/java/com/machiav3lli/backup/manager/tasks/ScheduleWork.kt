@@ -455,6 +455,7 @@ class ScheduleWork(
         }
     }
 
+    @Synchronized
     private fun createForegroundNotification(): Notification {
         if (notification != null) return notification!!
 

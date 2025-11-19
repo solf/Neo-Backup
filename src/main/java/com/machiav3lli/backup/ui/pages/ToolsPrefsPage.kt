@@ -56,6 +56,7 @@ import com.machiav3lli.backup.viewmodels.MainVM
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.io.BufferedOutputStream
@@ -322,37 +323,51 @@ private fun Context.onClickEnforceBackupsLimit(
     coroutineScope: CoroutineScope,
     showDialog: (String, () -> Unit) -> Unit,
 ): Boolean {
-    // TODO consider locked backups for the list
-    val packagesForHousekeeping = viewModel.packageMap.value.values
-        .filter { pref_numBackupRevisions.value > 0 && it.numberOfBackups > pref_numBackupRevisions.value }
-    if (packagesForHousekeeping.isNotEmpty()) {
-        showDialog(
-            getString(
-                R.string.enforce_backups_limit_FORMAT,
-                pref_numBackupRevisions.value,
-                packagesForHousekeeping.joinToString { it.packageLabel }
-            ),
-        ) {
-            coroutineScope.launch(Dispatchers.IO) {
-                packagesForHousekeeping.forEach {
-                    BackupRestoreHelper.housekeepingPackageBackups(it)
-                    Package.invalidateCacheForPackage(it.packageName)
-                }
-                snackbarHostState.show(
-                    coroutineScope,
-                    getString(
-                        R.string.enforced_backups_limit_FORMAT,
-                        pref_numBackupRevisions.value,
-                        packagesForHousekeeping.joinToString { it.packageLabel }
-                    ),
-                )
-            }
+    // Launch in coroutine to ensure we get fresh package data
+    coroutineScope.launch(Dispatchers.IO) {
+        // Get fresh package list - packageMap.value might be stale if not actively subscribed
+        val packageMap = viewModel.packageMap.value
+        
+        // If empty, it means the flow hasn't emitted yet, so wait for first emission
+        val packages = if (packageMap.isEmpty()) {
+            viewModel.packageMap.first { it.isNotEmpty() }.values
+        } else {
+            packageMap.values
         }
-    } else {
-        snackbarHostState.show(
-            coroutineScope,
-            getString(R.string.no_apps_to_enforce_backups_limit),
-        )
+        
+        // TODO consider locked backups for the list
+        val packagesForHousekeeping = packages
+            .filter { pref_numBackupRevisions.value > 0 && it.numberOfBackups > pref_numBackupRevisions.value }
+        
+        if (packagesForHousekeeping.isNotEmpty()) {
+            showDialog(
+                getString(
+                    R.string.enforce_backups_limit_FORMAT,
+                    pref_numBackupRevisions.value,
+                    packagesForHousekeeping.joinToString { it.packageLabel }
+                ),
+            ) {
+                coroutineScope.launch(Dispatchers.IO) {
+                    packagesForHousekeeping.forEach {
+                        BackupRestoreHelper.housekeepingPackageBackups(it)
+                        Package.invalidateCacheForPackage(it.packageName)
+                    }
+                    snackbarHostState.show(
+                        coroutineScope,
+                        getString(
+                            R.string.enforced_backups_limit_FORMAT,
+                            pref_numBackupRevisions.value,
+                            packagesForHousekeeping.joinToString { it.packageLabel }
+                        ),
+                    )
+                }
+            }
+        } else {
+            snackbarHostState.show(
+                coroutineScope,
+                getString(R.string.no_apps_to_enforce_backups_limit),
+            )
+        }
     }
     return true
 }
