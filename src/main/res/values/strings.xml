@@ -476,6 +476,8 @@
     <string name="enforced_backups_limit_FORMAT">Enforced the backups limit of %d on the following apps: %s</string>
     <string name="no_apps_to_enforce_backups_limit">No apps to enforce the backups limit on</string>
     <string name="enforce_backups_limit_summary">Enforce the set backup revisions limit on all apps that surpass it.</string>
+    <string name="operation_completed_generic">Operation completed</string>
+    <string name="operation_failed">Operation failed</string>
     <string name="title_app_management">App management:</string>
     <string name="title_backup_management">Backup management:</string>
     <string name="dialogUndo">Undo</string>

@@ -53,6 +53,7 @@ import com.machiav3lli.backup.utils.BACKUP_DATE_TIME_FORMATTER
 import com.machiav3lli.backup.utils.SystemUtils
 import com.machiav3lli.backup.utils.applyFilter
 import com.machiav3lli.backup.utils.extensions.koinNeoViewModel
+import com.machiav3lli.backup.utils.runPersistentOperation
 import com.machiav3lli.backup.viewmodels.MainVM
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -281,27 +282,16 @@ private fun Context.onClickUninstalledBackupsDelete(
 }
 
 private fun Context.deleteBackups(deleteList: List<Package>) {
-    val notificationId = generateUniqueNotificationId()
-    deleteList.forEachIndexed { i, ai ->
-        showNotification(
-            this,
-            NeoActivity::class.java,
-            notificationId,
-            "${getString(R.string.batchDeleteMessage)} ($i/${deleteList.size})",
-            ai.packageLabel,
-            false
-        )
-        Timber.i("deleting backups of ${ai.packageLabel}")
-        ai.deleteAllBackups()
+    runPersistentOperation(
+        context = this,
+        title = getString(R.string.batchDeleteNotificationTitle)
+    ) { progress ->
+        deleteList.forEachIndexed { i, ai ->
+            progress.update("${getString(R.string.batchDeleteMessage)} (${i+1}/${deleteList.size}) - ${ai.packageLabel}")
+            Timber.i("deleting backups of ${ai.packageLabel}")
+            ai.deleteAllBackups()
+        }
     }
-    showNotification(
-        this,
-        NeoActivity::class.java,
-        notificationId,
-        getString(R.string.batchDeleteNotificationTitle),
-        "${getString(R.string.batchDeleteBackupsDeleted)} ${deleteList.size}",
-        true  // Allow user to dismiss completion notification
-    )
 }
 
 val pref_cleanupBackupDir = LinkPref(
@@ -348,19 +338,16 @@ private fun Context.onClickEnforceBackupsLimit(
                     packagesForHousekeeping.joinToString { it.packageLabel }
                 ),
             ) {
-                coroutineScope.launch(Dispatchers.IO) {
-                    packagesForHousekeeping.forEach {
-                        BackupRestoreHelper.housekeepingPackageBackups(it)
-                        Package.invalidateCacheForPackage(it.packageName)
+                // Use generic helper for persistent operation
+                runPersistentOperation(
+                    context = this@onClickEnforceBackupsLimit,
+                    title = getString(R.string.enforce_backups_limit)
+                ) { progress ->
+                    packagesForHousekeeping.forEachIndexed { i, pkg ->
+                        progress.update("${pkg.packageLabel} (${i+1}/${packagesForHousekeeping.size})")
+                        BackupRestoreHelper.housekeepingPackageBackups(pkg)
+                        Package.invalidateCacheForPackage(pkg.packageName)
                     }
-                    snackbarHostState.show(
-                        coroutineScope,
-                        getString(
-                            R.string.enforced_backups_limit_FORMAT,
-                            pref_numBackupRevisions.value,
-                            packagesForHousekeeping.joinToString { it.packageLabel }
-                        ),
-                    )
                 }
             }
         } else {
