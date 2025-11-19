@@ -558,31 +558,31 @@ class NeoApp : Application(), KoinStartup {
         // the lock must be transferred from one object/function to another
         // e.g. from the receiver to the service
         fun wakelock(aquire: Boolean) {
-            if (aquire) {
-                val before = wakeLockNested.get()
-                traceDebug { "%%%%% $WAKELOCK_TAG wakelock aquire (before: $before)" }
-                debugLog { "[WAKELOCK] acquire() called: counter BEFORE=$before\n${getDebugStackTrace()}" }
-                
-                if (wakeLockNested.accumulateAndGet(+1, Int::plus) == 1) {
-                    val pm: PowerManager = get(PowerManager::class.java)
-                    theWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKELOCK_TAG)
-                    theWakeLock?.acquire(60 * 60 * 1000L)
-                    traceDebug { "%%%%% $WAKELOCK_TAG wakelock ACQUIRED" }
-                    debugLog { "[WAKELOCK] ACQUIRED partial wakelock: counter now=${wakeLockNested.get()}" }
+            synchronized(wakeLockNested) {
+                if (aquire) {
+                    val after = wakeLockNested.accumulateAndGet(+1, Int::plus)
+                    val before = after - 1
+                    val actuallyAcquired = (after == 1)
+                    
+                    if (actuallyAcquired) {
+                        val pm: PowerManager = get(PowerManager::class.java)
+                        theWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKELOCK_TAG)
+                        theWakeLock?.acquire(60 * 60 * 1000L)
+                    }
+                    
+                    traceDebug { "%%%%% $WAKELOCK_TAG acquire: $before→$after ${if (actuallyAcquired) "ACQUIRED" else "ref-count"}" }
+                    debugLog { "[WAKELOCK] acquire: $before→$after ${if (actuallyAcquired) "ACQUIRED" else "ref-count"}\n${getDebugStackTrace()}" }
                 } else {
-                    debugLog { "[WAKELOCK] incremented reference count: counter now=${wakeLockNested.get()}" }
-                }
-            } else {
-                val before = wakeLockNested.get()
-                traceDebug { "%%%%% $WAKELOCK_TAG wakelock release (before: $before)" }
-                debugLog { "[WAKELOCK] release() called: counter BEFORE=$before\n${getDebugStackTrace()}" }
-                
-                if (wakeLockNested.accumulateAndGet(-1, Int::plus) == 0) {
-                    traceDebug { "%%%%% $WAKELOCK_TAG wakelock RELEASING" }
-                    theWakeLock?.release()
-                    debugLog { "[WAKELOCK] RELEASED partial wakelock: counter now=0" }
-                } else {
-                    debugLog { "[WAKELOCK] decremented reference count: counter now=${wakeLockNested.get()}" }
+                    val after = wakeLockNested.accumulateAndGet(-1, Int::plus)
+                    val before = after + 1
+                    val actuallyReleased = (after == 0)
+                    
+                    if (actuallyReleased) {
+                        theWakeLock?.release()
+                    }
+                    
+                    traceDebug { "%%%%% $WAKELOCK_TAG release: $before→$after ${if (actuallyReleased) "RELEASED" else "ref-count"}" }
+                    debugLog { "[WAKELOCK] release: $before→$after ${if (actuallyReleased) "RELEASED" else "ref-count"}\n${getDebugStackTrace()}" }
                 }
             }
         }
