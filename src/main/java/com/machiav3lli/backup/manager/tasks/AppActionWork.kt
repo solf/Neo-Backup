@@ -85,6 +85,8 @@ class AppActionWork(val context: Context, workerParams: WorkerParameters) :
         val work = this
 
         return withContext(jobPool) {
+            var actionResult: ActionResult? = null
+            
             try {
                 debugLog { "[WORKER-START] AppActionWork.doWork() ENTRY: packageName=$packageName, batchName=$batchName, backup=$backupBoolean | ${getCompactStackTrace()}" }
 
@@ -99,8 +101,6 @@ class AppActionWork(val context: Context, workerParams: WorkerParameters) :
                     debugLog { "[NOTIF-SHOW] AppActionWork.doWork() foreground notification SHOWN: packageName=$packageName" }
                     //setForegroundAsync(getForegroundInfo())  //TODO hg42 what's the difference?
                 }
-
-                var actionResult: ActionResult? = null
 
                 setOperation("")
 
@@ -174,7 +174,20 @@ class AppActionWork(val context: Context, workerParams: WorkerParameters) :
                 val result = if (succeeded) {
                     setOperation("======>OK")
                     Timber.w("package: $packageName OK")
-                    debugLog { "[WORKER-SUCCESS] AppActionWork.doWork() succeeded: packageName=$packageName" }
+                    
+                    val actionIndicator = when {
+                        backupBoolean -> {
+                            val size = actionResult?.backup?.size ?: 0L
+                            val error = actionResult?.message ?: ""
+                            when {
+                                size > 0 -> "BACKUP:${size / 1024}KB"
+                                error.contains("Skipped") -> "SKIP:no_changes"
+                                else -> "BACKUP:0B"
+                            }
+                        }
+                        else -> "RESTORE"
+                    }
+                    debugLog { "[WORKER-SUCCESS] AppActionWork.doWork() succeeded: packageName=$packageName, action=$actionIndicator" }
                     Result.success(getWorkData("OK", actionResult))
                 } else {
                     failures++
@@ -203,7 +216,19 @@ class AppActionWork(val context: Context, workerParams: WorkerParameters) :
 
                 result
             } finally {
-                debugLog { "[WORKER-EXIT] AppActionWork.doWork() exiting: packageName=$packageName" }
+                val finalStatus = if (actionResult?.succeeded == true) {
+                    val size = actionResult?.backup?.size ?: 0L
+                    val error = actionResult?.message ?: ""
+                    when {
+                        !backupBoolean -> "RESTORE:OK"
+                        size > 0 -> "BACKUP:${size / 1024}KB"
+                        error.contains("Skipped") -> "SKIP:no_changes"
+                        else -> "SUCCESS:unknown"
+                    }
+                } else {
+                    "FAILED:${actionResult?.message?.take(50) ?: "unknown"}"
+                }
+                debugLog { "[WORKER-EXIT] AppActionWork.doWork() exiting: packageName=$packageName, status=$finalStatus" }
             }
         }
     }
