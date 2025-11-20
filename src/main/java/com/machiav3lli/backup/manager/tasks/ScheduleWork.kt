@@ -175,8 +175,6 @@ class ScheduleWork(
             }
 
             debugLog { "ScheduleWork.doWork() all iterations complete, returning SUCCESS" }
-            NeoApp.wakelock(false)
-
             Result.success()
         } catch (e: Exception) {
             debugLog { "ScheduleWork.doWork() EXCEPTION: ${e.javaClass.simpleName}: ${e.message}" }

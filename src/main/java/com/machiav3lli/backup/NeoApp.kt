@@ -575,6 +575,19 @@ class NeoApp : Application(), KoinStartup {
                 } else {
                     val after = wakeLockNested.accumulateAndGet(-1, Int::plus)
                     val before = after + 1
+                    
+                    // ERROR DETECTION: Check for negative counter
+                    if (after < 0) {
+                        val stackTrace = getCompactStackTrace()
+                        traceDebug { "***ERROR*** $WAKELOCK_TAG counter went NEGATIVE: $before→$after | $stackTrace" }
+                        debugLog { "***ERROR*** [WAKELOCK] NEGATIVE COUNTER: $before→$after (BUG: unbalanced release) | $stackTrace" }
+                        Timber.e("WAKELOCK ERROR: Counter went negative $before→$after, clamping to 0")
+                        
+                        // RECOVERY: Clamp to zero
+                        wakeLockNested.set(0)
+                        return  // Don't actually release, counter was already wrong
+                    }
+                    
                     val actuallyReleased = (after == 0)
                     
                     if (actuallyReleased) {
