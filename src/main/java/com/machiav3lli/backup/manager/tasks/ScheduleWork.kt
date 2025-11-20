@@ -243,7 +243,8 @@ class ScheduleWork(
             val batchState = get<WorkHandler>(WorkHandler::class.java).enqueueScheduledBackupBatch(
                 batchName = batchName,
                 packageNames = selectedItems,
-                schedule = schedule
+                schedule = schedule,
+                scheduleName = name
             )
             debugLog { "processSchedule() enqueued batch via WorkHandler: batchName='$batchName', packageCount=${selectedItems.size}" }
 

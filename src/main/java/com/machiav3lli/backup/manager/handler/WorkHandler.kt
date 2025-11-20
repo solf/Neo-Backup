@@ -22,6 +22,7 @@ import com.machiav3lli.backup.NeoApp
 import com.machiav3lli.backup.R
 import com.machiav3lli.backup.data.dbs.entity.Schedule
 import com.machiav3lli.backup.classAddress
+import com.machiav3lli.backup.manager.handler.ScheduleLogHandler
 import com.machiav3lli.backup.manager.services.CommandReceiver
 import com.machiav3lli.backup.manager.tasks.AppActionWork
 import com.machiav3lli.backup.ui.activities.NeoActivity
@@ -151,12 +152,14 @@ class WorkHandler(
     fun enqueueScheduledBackupBatch(
         batchName: String,
         packageNames: List<String>,
-        schedule: Schedule
+        schedule: Schedule,
+        scheduleName: String
     ): BatchState {
-        debugLog { "WorkHandler.enqueueScheduledBackupBatch() ENTRY: batchName='$batchName', packageCount=${packageNames.size}" }
+        debugLog { "WorkHandler.enqueueScheduledBackupBatch() ENTRY: batchName='$batchName', scheduleName='$scheduleName', packageCount=${packageNames.size}" }
         
         // Register batch - creates and returns BatchState with completion signal
         val batchState = beginBatch(batchName)
+        batchState.backupScheduleName = scheduleName  // Enable per-package logging to schedules.log
         
         // Generate unique notification ID for this batch
         val notificationId = generateUniqueNotificationId()
@@ -323,6 +326,9 @@ class WorkHandler(
             var isCanceled: Boolean = false,
             var completionSignal: kotlinx.coroutines.CompletableDeferred<Unit>? = null,
             
+            // If set, log individual package results to schedules.log (only for scheduled backups)
+            var backupScheduleName: String? = null,
+            
             // Backup statistics; Solf: not a great design as WorkHandler handles restore too, but expedient to have them here for the moment
             var backedUpCount: Int = 0,
             var skippedCount: Int = 0,
@@ -419,18 +425,68 @@ class WorkHandler(
                                     skippedCount++
                                 }
                             }
+                            
+                            // Log to schedules.log if this is a scheduled backup
+                            batch.backupScheduleName?.let { scheduleName ->
+                                if (backupBoolean && packageName != null && packageLabel != null) {
+                                    val backupSize = data.getLong("backupSize", 0L)
+                                    val error = data.getString("error") ?: ""
+                                    val (decision, reason) = when {
+                                        error.contains("Skipped") -> "SKIP" to "no_changes"
+                                        backupSize > 0 -> "BACKUP" to "scheduled_backup"
+                                        else -> "SKIP" to "no_changes"
+                                    }
+                                    ScheduleLogHandler.writeAppDecision(
+                                        scheduleName = scheduleName,
+                                        packageName = packageName,
+                                        packageLabel = packageLabel,
+                                        decision = decision,
+                                        reason = reason,
+                                        sizeBytes = backupSize
+                                    )
+                                }
+                            }
                         }
 
                         WorkInfo.State.FAILED    -> {
                             failed++
                             workFinished++
                             packageName?.let { packagesState.put(it, "BAD") }
+                            
+                            // Log to schedules.log if this is a scheduled backup
+                            batch.backupScheduleName?.let { scheduleName ->
+                                if (backupBoolean && packageName != null && packageLabel != null) {
+                                    val error = data.getString("error") ?: "unknown_error"
+                                    ScheduleLogHandler.writeAppDecision(
+                                        scheduleName = scheduleName,
+                                        packageName = packageName,
+                                        packageLabel = packageLabel,
+                                        decision = "FAILED",
+                                        reason = error,
+                                        sizeBytes = 0
+                                    )
+                                }
+                            }
                         }
 
                         WorkInfo.State.CANCELLED -> {
                             canceled++
                             workFinished++
                             packageName?.let { packagesState.put(it, "STP") }
+                            
+                            // Log to schedules.log if this is a scheduled backup
+                            batch.backupScheduleName?.let { scheduleName ->
+                                if (backupBoolean && packageName != null && packageLabel != null) {
+                                    ScheduleLogHandler.writeAppDecision(
+                                        scheduleName = scheduleName,
+                                        packageName = packageName,
+                                        packageLabel = packageLabel,
+                                        decision = "CANCELLED",
+                                        reason = "user_cancelled",
+                                        sizeBytes = 0
+                                    )
+                                }
+                            }
                         }
 
                         WorkInfo.State.ENQUEUED  -> {
