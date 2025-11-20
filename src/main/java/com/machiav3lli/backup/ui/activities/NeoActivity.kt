@@ -40,6 +40,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Observer
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import androidx.work.OneTimeWorkRequest
@@ -453,7 +454,6 @@ class NeoActivity : BaseActivity() {
         val notificationId = generateUniqueNotificationId()
         val batchType = getString(if (backupBoolean) R.string.backup else R.string.restore)
         val batchName = WorkHandler.getBatchName(batchType, now)
-        val workManager = get<WorkManager>(WorkManager::class.java)
 
         val selectedItems = selectedPackageNames
             .mapIndexed { i, packageName ->
@@ -462,13 +462,9 @@ class NeoActivity : BaseActivity() {
             }
             .filterNotNull()
 
-        var errors = ""
-        var resultsSuccess = true
-        var counter = 0
+        // Create work requests for all packages
         val worksList: MutableList<OneTimeWorkRequest> = mutableListOf()
-        get<WorkHandler>(WorkHandler::class.java).beginBatch(batchName)
         selectedItems.forEach { (packageName, mode) ->
-
             val oneTimeWorkRequest =
                 AppActionWork.Request(
                     packageName = packageName,
@@ -479,40 +475,24 @@ class NeoActivity : BaseActivity() {
                     immediate = true
                 )
             worksList.add(oneTimeWorkRequest)
-
-            val oneTimeWorkLiveData = workManager.getWorkInfoByIdLiveData(oneTimeWorkRequest.id)
-            oneTimeWorkLiveData.observeForever(
-                object : Observer<WorkInfo?> {    //TODO WECH hg42
-                    override fun onChanged(value: WorkInfo?) {
-                        when (value?.state) {
-                            WorkInfo.State.SUCCEEDED -> {
-                                counter += 1
-
-                                val (succeeded, packageLabel, error) = AppActionWork.getOutput(value)
-                                if (error.isNotEmpty()) errors =
-                                    "$errors$packageLabel: ${      //TODO hg42 add to WorkHandler
-                                        LogsHandler.handleErrorMessages(
-                                            this@NeoActivity,
-                                            error
-                                        )
-                                    }\n"
-
-                                resultsSuccess = resultsSuccess and succeeded
-                                updatePackage(packageName)
-                                oneTimeWorkLiveData.removeObserver(this)
-                            }
-
-                            else                     -> {}
-                        }
-                    }
-                }
-            )
         }
 
+        // Enqueue batch via WorkHandler and await completion
         if (worksList.isNotEmpty()) {
-            workManager
-                .beginWith(worksList)
-                .enqueue()
+            val batchState = get<WorkHandler>(WorkHandler::class.java).enqueueUIBatchOperation(
+                batchName = batchName,
+                workRequests = worksList
+            )
+            
+            // Launch coroutine to await completion and update UI
+            lifecycleScope.launch {
+                batchState.completionSignal!!.await()
+                
+                // Update all packages in UI after batch completes
+                selectedItems.forEach { (packageName, _) ->
+                    updatePackage(packageName)
+                }
+            }
         }
     }
 
@@ -525,7 +505,6 @@ class NeoActivity : BaseActivity() {
         val notificationId = generateUniqueNotificationId()
         val batchType = getString(R.string.restore)
         val batchName = WorkHandler.getBatchName(batchType, now)
-        val workManager = get<WorkManager>(WorkManager::class.java)
 
         val selectedItems = buildList {
             selectedPackageNames.forEach { pn ->
@@ -546,11 +525,8 @@ class NeoActivity : BaseActivity() {
             }
         }
 
-        var errors = ""
-        var resultsSuccess = true
-        var counter = 0
+        // Create work requests for all packages
         val worksList: MutableList<OneTimeWorkRequest> = mutableListOf()
-        get<WorkHandler>(WorkHandler::class.java).beginBatch(batchName)
         selectedItems.forEach { (packageName, bi, mode) ->
             val oneTimeWorkRequest = AppActionWork.Request(
                 packageName = packageName,
@@ -562,39 +538,25 @@ class NeoActivity : BaseActivity() {
                 immediate = true,
             )
             worksList.add(oneTimeWorkRequest)
-
-            val oneTimeWorkLiveData = workManager.getWorkInfoByIdLiveData(oneTimeWorkRequest.id)
-            oneTimeWorkLiveData.observeForever(
-                object : Observer<WorkInfo?> {
-                    override fun onChanged(value: WorkInfo?) {
-                        when (value?.state) {
-                            WorkInfo.State.SUCCEEDED -> {
-                                counter += 1
-
-                                val (succeeded, packageLabel, error) = AppActionWork.getOutput(value)
-                                if (error.isNotEmpty()) errors =
-                                    "$errors$packageLabel: ${
-                                        LogsHandler.handleErrorMessages(
-                                            this@NeoActivity,
-                                            error
-                                        )
-                                    }\n"
-
-                                resultsSuccess = resultsSuccess and succeeded
-                                oneTimeWorkLiveData.removeObserver(this)
-                            }
-
-                            else                     -> {}
-                        }
-                    }
-                }
-            )
         }
 
+        // Enqueue batch via WorkHandler and await completion
         if (worksList.isNotEmpty()) {
-            workManager
-                .beginWith(worksList)
-                .enqueue()
+            val batchState = get<WorkHandler>(WorkHandler::class.java).enqueueUIBatchOperation(
+                batchName = batchName,
+                workRequests = worksList
+            )
+            
+            // Launch coroutine to await completion and update UI
+            lifecycleScope.launch {
+                batchState.completionSignal!!.await()
+                
+                // Update all packages in UI after batch completes
+                // Extract unique package names from selectedItems (may have duplicates due to apk/data splits)
+                selectedItems.map { it.first }.distinct().forEach { packageName ->
+                    updatePackage(packageName)
+                }
+            }
         }
     }
 

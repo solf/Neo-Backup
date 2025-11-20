@@ -15,6 +15,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.setValue
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.machiav3lli.backup.MODE_UNSET
@@ -181,6 +182,36 @@ class WorkHandler(
         manager.beginWith(workRequests).enqueue()
         
         debugLog { "WorkHandler.enqueueScheduledBackupBatch() EXIT: enqueued ${workRequests.size} workers" }
+        return batchState
+    }
+
+    fun enqueueUIBatchOperation(
+        batchName: String,
+        workRequests: List<OneTimeWorkRequest>
+    ): BatchState {
+        debugLog { "WorkHandler.enqueueUIBatchOperation() ENTRY: batchName='$batchName', workCount=${workRequests.size}" }
+        
+        // Validate all work requests have the correct batch name in tags (safety check)
+        workRequests.forEachIndexed { index, request ->
+            val hasCorrectBatchTag = request.tags.any { tag ->
+                tag.toString().startsWith("name:") && tag.toString().substringAfter("name:") == batchName
+            }
+            if (!hasCorrectBatchTag) {
+                val foundBatchTag = request.tags.find { it.toString().startsWith("name:") }
+                Timber.e("WorkHandler.enqueueUIBatchOperation() ERROR: Work request at index $index has incorrect batch name tag. Expected 'name:$batchName', found '$foundBatchTag'")
+                throw IllegalArgumentException("Work request at index $index does not have correct batch name tag 'name:$batchName'")
+            }
+        }
+        
+        // Register batch - creates and returns BatchState with completion signal
+        val batchState = beginBatch(batchName)
+        
+        // Enqueue work if there are any requests
+        if (workRequests.isNotEmpty()) {
+            manager.beginWith(workRequests).enqueue()
+        }
+        
+        debugLog { "WorkHandler.enqueueUIBatchOperation() EXIT: enqueued ${workRequests.size} workers" }
         return batchState
     }
 
