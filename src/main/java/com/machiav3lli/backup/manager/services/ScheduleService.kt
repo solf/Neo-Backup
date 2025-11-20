@@ -28,6 +28,7 @@ import android.os.Build
 import android.os.IBinder
 import android.os.Process
 import androidx.core.app.NotificationCompat
+import androidx.work.WorkManager
 import com.machiav3lli.backup.ACTION_CANCEL
 import com.machiav3lli.backup.ACTION_RUN_SCHEDULE
 import com.machiav3lli.backup.EXTRA_NAME
@@ -55,6 +56,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.java.KoinJavaComponent.get
+import timber.log.Timber
 
 open class ScheduleService : Service() {
     lateinit var notification: Notification
@@ -142,6 +144,57 @@ open class ScheduleService : Service() {
         }
 
         if (scheduleId >= 0) {
+            debugLog { "ScheduleService.onStartCommand() checking for duplicate work: scheduleId=$scheduleId, name='$scheduleName'" }
+            val workManager = get<WorkManager>(WorkManager::class.java)
+            
+            // Check if work is already queued/running in WorkManager
+            // Need to check both periodic and one-time work names
+            val periodicWorkName = "${ScheduleWork.SCHEDULE_WORK}$scheduleId"
+            val oneTimeWorkName = "${ScheduleWork.SCHEDULE_ONETIME}$scheduleId"
+            
+            debugLog { "ScheduleService.onStartCommand() querying WorkManager for existing work: periodic='$periodicWorkName', oneTime='$oneTimeWorkName'" }
+            
+            val periodicWorkInfos = workManager.getWorkInfosForUniqueWork(periodicWorkName).get()
+            val oneTimeWorkInfos = workManager.getWorkInfosForUniqueWork(oneTimeWorkName).get()
+            
+            debugLog { "ScheduleService.onStartCommand() WorkManager query results: periodicCount=${periodicWorkInfos.size}, oneTimeCount=${oneTimeWorkInfos.size}" }
+            
+            val periodicWorkQueued = periodicWorkInfos.any { !it.state.isFinished }
+            val oneTimeWorkQueued = oneTimeWorkInfos.any { !it.state.isFinished }
+            
+            debugLog { "ScheduleService.onStartCommand() unfinished work check: periodicQueued=$periodicWorkQueued, oneTimeQueued=$oneTimeWorkQueued" }
+            
+            if (periodicWorkQueued || oneTimeWorkQueued) {
+                val workType = if (periodicWorkQueued) "periodic" else "one-time"
+                val workStates = (periodicWorkInfos + oneTimeWorkInfos)
+                    .filter { !it.state.isFinished }
+                    .map { it.state.name }
+                    .joinToString(", ")
+                
+                debugLog { "ScheduleService.onStartCommand() DUPLICATE DETECTED: scheduleId=$scheduleId, workType=$workType, states=[$workStates]" }
+                traceSchedule { 
+                    "[$scheduleId] '$scheduleName' $workType work already queued/running in WorkManager (states: $workStates), skipping duplicate enqueue" 
+                }
+                Timber.i("[$scheduleId] Duplicate schedule prevented by ScheduleService WorkManager check: $workType work in states [$workStates]")
+                
+                // Still schedule next alarm for future runs
+                debugLog { "ScheduleService.onStartCommand() duplicate case: scheduling next alarm" }
+                scheduleAlarmsOnce(this)
+                
+                // Shutdown service after brief delay
+                debugLog { "ScheduleService.onStartCommand() duplicate case: scheduling service shutdown" }
+                CoroutineScope(Dispatchers.IO).launch {
+                    delay(1000)  // Brief delay
+                    debugLog { "ScheduleService duplicate case: calling stopSelf() after delay" }
+                    stopSelf()
+                }
+                NeoApp.wakelock(false)
+                debugLog { "ScheduleService.onStartCommand() duplicate case: EXIT, returning START_NOT_STICKY" }
+                return START_NOT_STICKY
+            }
+            
+            // Safe to enqueue - no existing work found
+            debugLog { "ScheduleService.onStartCommand() no duplicate found, proceeding with enqueue: scheduleId=$scheduleId" }
             val repeatCount = 1 + pref_fakeScheduleDups.value
             debugLog { "ScheduleService.onStartCommand() repeatCount=$repeatCount (pref_fakeScheduleDups=${pref_fakeScheduleDups.value})" }
             repeat(repeatCount) { count ->

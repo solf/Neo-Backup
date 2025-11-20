@@ -445,8 +445,8 @@ class ScheduleWork(
 
     companion object {
         private val CHANNEL_ID = ScheduleWork::class.java.name
-        private const val SCHEDULE_ONETIME = "schedule_one_time_"
-        private const val SCHEDULE_WORK = "schedule_work_"
+        const val SCHEDULE_ONETIME = "schedule_one_time_"
+        const val SCHEDULE_WORK = "schedule_work_"
         private val runningSchedules = ConcurrentHashMap<Long, Boolean>()
 
         fun enqueuePeriodic(schedule: Schedule, reschedule: Boolean = false) {
