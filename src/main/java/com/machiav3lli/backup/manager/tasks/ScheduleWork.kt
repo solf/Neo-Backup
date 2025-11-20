@@ -111,6 +111,7 @@ class ScheduleWork(
             val name = inputData.getString(EXTRA_NAME) ?: ""
 
             debugLog { "ScheduleWork.doWork() ENTRY: scheduleId=$scheduleId, name='$name'" }
+            debugLog { "ScheduleWork.doWork() call stack: ${getCompactStackTrace()}" }
 
             if (USE_CENTRALIZED_FOREGROUND_INSTEAD_OF_LEGACY && pref_useForegroundInJob.value) {
                 debugLog { "[NOTIF-FOREGROUND] ScheduleWork.doWork() setting foreground for entire schedule: scheduleId=$scheduleId" }
@@ -451,6 +452,7 @@ class ScheduleWork(
 
         fun enqueuePeriodic(schedule: Schedule, reschedule: Boolean = false) {
             if (!schedule.enabled) return
+            debugLog { "ScheduleWork.enqueuePeriodic() ENTRY: scheduleId=${schedule.id}, name='${schedule.name}', reschedule=$reschedule | ${getCompactStackTrace()}" }
             val workManager = get<WorkManager>(WorkManager::class.java)
 
             val (timeToRun, initialDelay) = calcRuntimeDiff(schedule)
@@ -493,13 +495,18 @@ class ScheduleWork(
             }
         }
 
-        fun enqueueImmediate(schedule: Schedule) =
+        fun enqueueImmediate(schedule: Schedule) {
+            debugLog { "ScheduleWork.enqueueImmediate() ENTRY: scheduleId=${schedule.id}, name='${schedule.name}' | ${getCompactStackTrace()}" }
             enqueueOnce(schedule.id, schedule.name, false)
+        }
 
-        fun enqueueScheduled(scheduleId: Long, scheduleName: String) =
+        fun enqueueScheduled(scheduleId: Long, scheduleName: String) {
+            debugLog { "ScheduleWork.enqueueScheduled() ENTRY: scheduleId=$scheduleId, name='$scheduleName' | ${getCompactStackTrace()}" }
             enqueueOnce(scheduleId, scheduleName, true)
+        }
 
         private fun enqueueOnce(scheduleId: Long, scheduleName: String, periodic: Boolean) {
+            debugLog { "ScheduleWork.enqueueOnce() ENTRY: scheduleId=$scheduleId, name='$scheduleName', periodic=$periodic | ${getCompactStackTrace()}" }
             val scheduleWorkRequest = OneTimeWorkRequestBuilder<ScheduleWork>()
                 .setInputData(
                     workDataOf(

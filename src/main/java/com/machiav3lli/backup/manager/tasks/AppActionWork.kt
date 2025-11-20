@@ -49,6 +49,7 @@ import com.machiav3lli.backup.manager.handler.WorkHandler.Companion.setVar
 import com.machiav3lli.backup.manager.handler.debugLog
 import com.machiav3lli.backup.manager.handler.getSpecial
 import com.machiav3lli.backup.manager.handler.getCompactStackTrace
+import com.machiav3lli.backup.manager.handler.ScheduleLogHandler
 import com.machiav3lli.backup.manager.handler.showNotification
 import com.machiav3lli.backup.manager.services.CommandReceiver
 import com.machiav3lli.backup.ui.activities.NeoActivity
@@ -74,6 +75,7 @@ class AppActionWork(val context: Context, workerParams: WorkerParameters) :
     private var notificationId: Int = inputData.getInt("notificationId", 123454321)
     private var failures = getVar(batchName, packageName, "failures")?.toInt() ?: 0
     private var backupModifiedOnly = inputData.getBoolean("backupModifiedOnly", false)
+    private var scheduleName: String? = inputData.getString("scheduleName")
     private var foregroundInfo: ForegroundInfo? = null
 
     init {
@@ -175,6 +177,27 @@ class AppActionWork(val context: Context, workerParams: WorkerParameters) :
                     setOperation("======>OK")
                     Timber.w("package: $packageName OK")
                     
+                    // Log to schedules.log if this is a scheduled backup
+                    scheduleName?.let { schedule ->
+                        if (backupBoolean) {
+                            val backupSize = actionResult?.backup?.size ?: 0L
+                            val error = actionResult?.message ?: ""
+                            val (decision, reason) = when {
+                                error.contains("Skipped") -> "SKIP" to "no_changes"
+                                backupSize > 0 -> "BACKUP" to "scheduled_backup"
+                                else -> "SKIP" to "no_changes"
+                            }
+                            ScheduleLogHandler.writeAppDecision(
+                                scheduleName = schedule,
+                                packageName = packageName,
+                                packageLabel = packageLabel,
+                                decision = decision,
+                                reason = reason,
+                                sizeBytes = backupSize
+                            )
+                        }
+                    }
+                    
                     val actionIndicator = when {
                         backupBoolean -> {
                             val size = actionResult?.backup?.size ?: 0L
@@ -198,6 +221,21 @@ class AppActionWork(val context: Context, workerParams: WorkerParameters) :
                         debugLog { "[WORKER-RETRY] AppActionWork.doWork() retrying: packageName=$packageName, failures=$failures/${pref_maxRetriesPerPackage.value}" }
                         Result.retry()
                     } else {
+                        // Log failure to schedules.log if this is a scheduled backup
+                        scheduleName?.let { schedule ->
+                            if (backupBoolean) {
+                                val error = actionResult?.message ?: "unknown_error"
+                                ScheduleLogHandler.writeAppDecision(
+                                    scheduleName = schedule,
+                                    packageName = packageName,
+                                    packageLabel = packageLabel,
+                                    decision = "FAILED",
+                                    reason = error,
+                                    sizeBytes = 0
+                                )
+                            }
+                        }
+                        
                         val message = "$packageName\n${actionResult?.message}"
                         showNotification(
                             context, NeoActivity::class.java,
@@ -355,6 +393,7 @@ class AppActionWork(val context: Context, workerParams: WorkerParameters) :
             batchName: String,
             immediate: Boolean,
             backupModifiedOnly: Boolean = false,
+            scheduleName: String? = null,
         ): OneTimeWorkRequest {
             val builder = OneTimeWorkRequest.Builder(AppActionWork::class.java)
 
@@ -371,7 +410,8 @@ class AppActionWork(val context: Context, workerParams: WorkerParameters) :
                         "batchName" to batchName,
                         "operation" to "",
                         "immediate" to immediate,
-                        "backupModifiedOnly" to backupModifiedOnly
+                        "backupModifiedOnly" to backupModifiedOnly,
+                        "scheduleName" to scheduleName
                     )
                 )
 
