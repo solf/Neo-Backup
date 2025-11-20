@@ -255,28 +255,43 @@ class ScheduleWork(
                     val awaitElapsed = System.currentTimeMillis() - awaitStartTime
                     debugLog { "processSchedule() batch completion signal received after ${awaitElapsed}ms" }
                     
-                    // Get statistics from WorkHandler's BatchState
-                    debugLog { "processSchedule() retrieving statistics from batch: backedUp=${batchState.backedUpCount}, skipped=${batchState.skippedCount}, size=${batchState.totalSize}" }
+                    // Calculate statistics from task results
+                    val allTasks = batchState.tasks
+                    val succeeded = allTasks.count { it.isSucceeded() }
+                    val failed = allTasks.count { it.isFailed() }
+                    val cancelled = allTasks.count { it.isCancelled() }
+                    
+                    val backupTasks = allTasks.filter { it.isBackup() && it.isSucceeded() }
+                    val backedUpCount = backupTasks.count { !it.isSkipped() && it.getBackupSize() > 0 }
+                    val skippedCount = backupTasks.count { it.isSkipped() }
+                    val totalSize = backupTasks.sumOf { it.getBackupSize() }
+                    
+                    debugLog { "processSchedule() calculated statistics: total=${allTasks.size}, succeeded=$succeeded, failed=$failed, cancelled=$cancelled, backedUp=$backedUpCount, skipped=$skippedCount, size=$totalSize" }
+                    
+                    // Log summary to schedules.log
+                    traceSchedule {
+                        "[$scheduleId] '$name' completed: ${allTasks.size} packages, $backedUpCount backed up, $skippedCount skipped, $failed failed, ${totalSize / 1024}KB total"
+                    }
                     
                     // Write completion to schedule log
                     endSchedule(name, "all jobs finished")
                     selectedItems.fastForEach {
                         packageRepo.updatePackage(it)
                     }
-                    debugLog { "processSchedule() calling writeScheduleEnd: backedUp=${batchState.backedUpCount}, skipped=${batchState.skippedCount}, size=${batchState.totalSize}" }
+                    debugLog { "processSchedule() calling writeScheduleEnd: backedUp=$backedUpCount, skipped=$skippedCount, size=$totalSize" }
                     ScheduleLogHandler.writeScheduleEnd(
                         scheduleName = name,
-                        backedUpCount = batchState.backedUpCount,
-                        skippedCount = batchState.skippedCount,
-                        totalSizeBytes = batchState.totalSize,
+                        backedUpCount = backedUpCount,
+                        skippedCount = skippedCount,
+                        totalSizeBytes = totalSize,
                         timestamp = java.time.LocalDateTime.now()
                     )
                     debugLog { "processSchedule() writeScheduleEnd COMPLETED" }
                     
                     ScheduleStats(
-                        backedUpCount = batchState.backedUpCount,
-                        skippedCount = batchState.skippedCount,
-                        totalSize = batchState.totalSize
+                        backedUpCount = backedUpCount,
+                        skippedCount = skippedCount,
+                        totalSize = totalSize
                     )
                 } else {
                     debugLog { "processSchedule() beginSchedule returned false (duplicate), returning null" }

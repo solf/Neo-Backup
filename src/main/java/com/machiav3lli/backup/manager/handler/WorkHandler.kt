@@ -178,6 +178,12 @@ class WorkHandler(
             )
         }
         
+        // Create WorkTask wrappers for each request
+        val workTasks = workRequests.map { request ->
+            WorkTask(manager, request.id)
+        }
+        batchState.tasks.addAll(workTasks)
+        
         // Enqueue work
         manager.beginWith(workRequests).enqueue()
         
@@ -205,6 +211,12 @@ class WorkHandler(
         
         // Register batch - creates and returns BatchState with completion signal
         val batchState = beginBatch(batchName)
+        
+        // Create WorkTask wrappers for each request
+        val workTasks = workRequests.map { request ->
+            WorkTask(manager, request.id)
+        }
+        batchState.tasks.addAll(workTasks)
         
         // Enqueue work if there are any requests
         if (workRequests.isNotEmpty()) {
@@ -342,11 +354,6 @@ class WorkHandler(
             var succeeded: Int = 0,
             var failed: Int = 0,
             var canceled: Int = 0,
-            
-            // Backup statistics; Solf: not a great design as WorkHandler handles restore too, but expedient to have them here for the moment
-            var backedUpCount: Int = 0,
-            var skippedCount: Int = 0,
-            var totalSize: Long = 0L,
         )
 
         class BatchState(
@@ -357,10 +364,8 @@ class WorkHandler(
             var isCanceled: Boolean = false,
             var completionSignal: kotlinx.coroutines.CompletableDeferred<Unit>? = null,
             
-            // Backup statistics; Solf: not a great design as WorkHandler handles restore too, but expedient to have them here for the moment
-            var backedUpCount: Int = 0,
-            var skippedCount: Int = 0,
-            var totalSize: Long = 0L,
+            // Task references for callers to query results
+            val tasks: MutableList<WorkTask> = mutableListOf(),
         )
 
         val batchesKnown = mutableMapOf<String, BatchState>()
@@ -376,6 +381,7 @@ class WorkHandler(
         }
 
         fun onProgressNoSync(handler: WorkHandler, workInfos: List<WorkInfo>? = null) {
+
             val manager = handler.manager
             val work = workInfos
                 ?: manager.getWorkInfosByTag(AppActionWork::class.qualifiedName!!).get()
@@ -441,18 +447,6 @@ class WorkHandler(
                             succeeded++
                             workFinished++
                             packageName?.let { packagesState.put(it, "OK ") }
-                            
-                            // Track backup statistics
-                            if (backupBoolean) {
-                                val backupSize = data.getLong("backupSize", 0L)
-                                val error = data.getString("error") ?: ""
-                                if (backupSize > 0) {
-                                    backedUpCount++
-                                    totalSize += backupSize
-                                } else if (error.contains("Skipped")) {
-                                    skippedCount++
-                                }
-                            }
                         }
 
                         WorkInfo.State.FAILED    -> {
@@ -549,12 +543,6 @@ class WorkHandler(
                                 bigText += ", $canceled cancelled"
                             if (retries > 0)
                                 bigText += ", $retries retried"
-                            
-                            // Add backup statistics if available
-                            if (backedUpCount > 0 || skippedCount > 0) {
-                                val sizeFormatted = android.text.format.Formatter.formatFileSize(appContext, totalSize)
-                                bigText += "\nBacked up: $backedUpCount, Skipped: $skippedCount, Total: $sizeFormatted"
-                            }
                         }
 
                         if (retries > 0)
@@ -669,11 +657,6 @@ class WorkHandler(
                         if (remaining <= 0) {
                             debugLog { "WorkHandler.onProgressNoSync() remaining <= 0: batch.nFinished=${batch.nFinished}" }
                             if (batch.nFinished == 0) {
-                                // Copy statistics from WorkState to BatchState before completing
-                                batch.backedUpCount = backedUpCount
-                                batch.skippedCount = skippedCount
-                                batch.totalSize = totalSize
-                                debugLog { "WorkHandler.onProgressNoSync() copied statistics to batch: backedUp=$backedUpCount, skipped=$skippedCount, size=$totalSize" }
                                 debugLog { "WorkHandler.onProgressNoSync() calling endBatch for '$batchName'" }
                                 workHandler.endBatch(batchName)
                             }
