@@ -26,7 +26,6 @@ import com.machiav3lli.backup.ACTION_CANCEL_SCHEDULE
 import com.machiav3lli.backup.EXTRA_NAME
 import com.machiav3lli.backup.EXTRA_PERIODIC
 import com.machiav3lli.backup.EXTRA_SCHEDULE_ID
-import com.machiav3lli.backup.MODE_UNSET
 import com.machiav3lli.backup.NeoApp
 import com.machiav3lli.backup.USE_CENTRALIZED_FOREGROUND_INSTEAD_OF_LEGACY
 import com.machiav3lli.backup.R
@@ -52,25 +51,17 @@ import com.machiav3lli.backup.ui.pages.pref_fakeScheduleDups
 import com.machiav3lli.backup.ui.pages.pref_useForegroundInJob
 import com.machiav3lli.backup.ui.pages.pref_useForegroundInService
 import com.machiav3lli.backup.ui.pages.supportInfo
-import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.atomic.AtomicLong
 import com.machiav3lli.backup.ui.pages.textLog
 import com.machiav3lli.backup.utils.FileUtils
 import com.machiav3lli.backup.utils.StorageLocationNotConfiguredException
 import com.machiav3lli.backup.utils.SystemUtils
 import com.machiav3lli.backup.utils.calcRuntimeDiff
 import com.machiav3lli.backup.utils.extensions.Android
-import com.machiav3lli.backup.utils.extensions.takeUntilSignal
 import com.machiav3lli.backup.utils.filterPackages
 import kotlinx.collections.immutable.toPersistentSet
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -216,7 +207,6 @@ class ScheduleWork(
             )
             debugLog { "[NOTIF-CREATE] processSchedule() posted 'Fetching...' notification: id=$fetchingNotificationId" }
             
-            val finishSignal = MutableStateFlow(false)
             val schedule = scheduleRepo.getSchedule(scheduleId)
             debugLog { "processSchedule() getSchedule: schedule=${if (schedule != null) "found" else "NULL"}" }
             if (schedule == null) {
@@ -237,154 +227,56 @@ class ScheduleWork(
                 return@coroutineScope null
             }
 
-            val worksList = mutableListOf<OneTimeWorkRequest>()
             val notificationManager =
                 context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             debugLog { "[NOTIF-CANCEL] ScheduleWork.processSchedule() canceling fetching notification: id=$fetchingNotificationId, scheduleId=$scheduleId | ${getCompactStackTrace()}" }
             notificationManager.cancel(fetchingNotificationId)
             debugLog { "[NOTIF-CANCEL] ScheduleWork.processSchedule() fetching notification canceled: id=$fetchingNotificationId" }
 
-            val batchName = WorkHandler.getBatchName(name, now)
-            get<WorkHandler>(WorkHandler::class.java).beginBatch(batchName)
-
-            var errors = ""
-            var resultsSuccess = true
-            val finished = AtomicInteger(0)
-            val queued = selectedItems.size
-            val totalBackupSize = AtomicLong(0L)
-            val backedUpCount = AtomicInteger(0)
-            val skippedCount = AtomicInteger(0)
-
-            val workJobs = selectedItems.map { packageName ->
-                val oneTimeWorkRequest = AppActionWork.Request(
-                    packageName = packageName,
-                    mode = schedule.mode ?: MODE_UNSET,
-                    backupBoolean = true,
-                    notificationId = notificationId,
-                    batchName = batchName,
-                    immediate = false,
-                    backupModifiedOnly = schedule.backupModifiedOnly
-                )
-                worksList.add(oneTimeWorkRequest)
-
-                if (inputData.getBoolean(EXTRA_PERIODIC, false) && schedule != null)
-                    scheduleRepo.update(schedule.copy(timePlaced = now))
-
-                async {
-                    get<WorkManager>(WorkManager::class.java).getWorkInfoByIdFlow(oneTimeWorkRequest.id)
-                        .takeUntilSignal(finishSignal)
-                        .collectLatest { workInfo ->
-                            when (workInfo?.state) {
-                                androidx.work.WorkInfo.State.SUCCEEDED,
-                                androidx.work.WorkInfo.State.FAILED,
-                                androidx.work.WorkInfo.State.CANCELLED -> {
-                                    finished.incrementAndGet()
-                                    val succeeded =
-                                        workInfo.outputData.getBoolean("succeeded", false)
-                                    val packageLabel =
-                                        workInfo.outputData.getString("packageLabel") ?: ""
-                                    val packageName = 
-                                        workInfo.outputData.getString("packageName") ?: ""
-                                    val error = workInfo.outputData.getString("error") ?: ""
-                                    val backupSize = workInfo.outputData.getLong("backupSize", 0L)
-                                    debugLog { "processSchedule() Flow: job terminal state=${workInfo.state}, pkg=$packageName, succeeded=$succeeded, finished=${finished.get()}/$queued" }
-                                    
-                                    // Track backed up vs skipped and log to schedule log
-                                    run {
-                                        val decision: String
-                                        val reason: String
-                                        val logSize: Long
-                                        
-                                        if (succeeded) {
-                                            if (error.contains("Skipped")) {
-                                                skippedCount.incrementAndGet()
-                                                decision = "SKIP"
-                                                reason = "no_changes"
-                                                logSize = 0L
-                                            } else {
-                                                totalBackupSize.addAndGet(backupSize)
-                                                backedUpCount.incrementAndGet()
-                                                decision = "BACKUP"
-                                                reason = if (schedule.backupModifiedOnly) "modified_data" else "scheduled_backup"
-                                                logSize = backupSize
-                                            }
-                                        } else {
-                                            decision = "FAILED"
-                                            reason = error.ifEmpty { "unknown_error" }
-                                            logSize = 0L
-                                        }
-                                        
-                                        ScheduleLogHandler.writeAppDecision(
-                                            name,
-                                            packageName,
-                                            packageLabel,
-                                            decision,
-                                            reason,
-                                            sizeBytes = logSize
-                                        )
-                                    }
-                                    debugLog { "processSchedule() Flow: counters after $packageName: backedUp=${backedUpCount.get()}, skipped=${skippedCount.get()}, finished=${finished.get()}/$queued" }
-
-                                    if (error.isNotEmpty()) {
-                                        errors = "$errors$packageLabel: ${
-                                            LogsHandler.handleErrorMessages(
-                                                context,
-                                                error
-                                            )
-                                        }\n"
-                                    }
-                                    resultsSuccess = resultsSuccess && succeeded
-
-                                    if (finished.get() >= queued) {
-                                        debugLog { "processSchedule() Flow: finished >= queued (${finished.get()} >= $queued), setting finishSignal" }
-                                        finishSignal.update { true }
-                                        endSchedule(name, "all jobs finished")
-                                        selectedItems.fastForEach {
-                                            packageRepo.updatePackage(it)
-                                        }
-                                        // Log completion with actual statistics
-                                        debugLog { "processSchedule() calling writeScheduleEnd: backedUp=${backedUpCount.get()}, skipped=${skippedCount.get()}, size=${totalBackupSize.get()}" }
-                                        ScheduleLogHandler.writeScheduleEnd(
-                                            scheduleName = name,
-                                            backedUpCount = backedUpCount.get(),
-                                            skippedCount = skippedCount.get(),
-                                            totalSizeBytes = totalBackupSize.get(),
-                                            timestamp = java.time.LocalDateTime.now()
-                                        )
-                                        debugLog { "processSchedule() writeScheduleEnd COMPLETED" }
-                                    }
-                                }
-
-                                else                                   -> {
-                                    if (finished.get() >= queued) {
-                                        finishSignal.update { true }
-                                        endSchedule(name, "all jobs finished")
-                                        selectedItems.fastForEach {
-                                            packageRepo.updatePackage(it)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                }
+            // Update schedule time if this is a periodic schedule
+            if (inputData.getBoolean(EXTRA_PERIODIC, false) && schedule != null) {
+                scheduleRepo.update(schedule.copy(timePlaced = now))
             }
 
-            debugLog { "processSchedule() worksList.size=${worksList.size}, workJobs.size=${workJobs.size}" }
-            if (worksList.isNotEmpty()) {
+            // Enqueue batch via WorkHandler - it handles everything
+            val batchName = WorkHandler.getBatchName(name, now)
+            val batchState = get<WorkHandler>(WorkHandler::class.java).enqueueScheduledBackupBatch(
+                batchName = batchName,
+                packageNames = selectedItems,
+                schedule = schedule
+            )
+            debugLog { "processSchedule() enqueued batch via WorkHandler: batchName='$batchName', packageCount=${selectedItems.size}" }
+
+            if (selectedItems.isNotEmpty()) {
                 if (beginSchedule(name, "queueing work")) {
-                    debugLog { "processSchedule() calling WorkManager.beginWith().enqueue() with ${worksList.size} work items" }
-                    get<WorkManager>(WorkManager::class.java)
-                        .beginWith(worksList)
-                        .enqueue()
-                    debugLog { "processSchedule() enqueue COMPLETED, now calling workJobs.awaitAll() for ${workJobs.size} async jobs" }
+                    debugLog { "processSchedule() awaiting WorkHandler batch completion signal" }
                     val awaitStartTime = System.currentTimeMillis()
-                    workJobs.awaitAll()
+                    batchState.completionSignal!!.await()
                     val awaitElapsed = System.currentTimeMillis() - awaitStartTime
-                    debugLog { "processSchedule() workJobs.awaitAll() RETURNED after ${awaitElapsed}ms" }
+                    debugLog { "processSchedule() batch completion signal received after ${awaitElapsed}ms" }
+                    
+                    // Get statistics from WorkHandler's BatchState
+                    debugLog { "processSchedule() retrieving statistics from batch: backedUp=${batchState.backedUpCount}, skipped=${batchState.skippedCount}, size=${batchState.totalSize}" }
+                    
+                    // Write completion to schedule log
+                    endSchedule(name, "all jobs finished")
+                    selectedItems.fastForEach {
+                        packageRepo.updatePackage(it)
+                    }
+                    debugLog { "processSchedule() calling writeScheduleEnd: backedUp=${batchState.backedUpCount}, skipped=${batchState.skippedCount}, size=${batchState.totalSize}" }
+                    ScheduleLogHandler.writeScheduleEnd(
+                        scheduleName = name,
+                        backedUpCount = batchState.backedUpCount,
+                        skippedCount = batchState.skippedCount,
+                        totalSizeBytes = batchState.totalSize,
+                        timestamp = java.time.LocalDateTime.now()
+                    )
+                    debugLog { "processSchedule() writeScheduleEnd COMPLETED" }
+                    
                     ScheduleStats(
-                        backedUpCount = backedUpCount.get(),
-                        skippedCount = skippedCount.get(),
-                        totalSize = totalBackupSize.get()
+                        backedUpCount = batchState.backedUpCount,
+                        skippedCount = batchState.skippedCount,
+                        totalSize = batchState.totalSize
                     )
                 } else {
                     debugLog { "processSchedule() beginSchedule returned false (duplicate), returning null" }

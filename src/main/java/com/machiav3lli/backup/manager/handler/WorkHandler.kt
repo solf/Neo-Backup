@@ -17,8 +17,10 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
+import com.machiav3lli.backup.MODE_UNSET
 import com.machiav3lli.backup.NeoApp
 import com.machiav3lli.backup.R
+import com.machiav3lli.backup.data.dbs.entity.Schedule
 import com.machiav3lli.backup.classAddress
 import com.machiav3lli.backup.manager.services.CommandReceiver
 import com.machiav3lli.backup.manager.tasks.AppActionWork
@@ -26,6 +28,7 @@ import com.machiav3lli.backup.ui.activities.NeoActivity
 import com.machiav3lli.backup.ui.pages.pref_fakeScheduleDups
 import com.machiav3lli.backup.ui.pages.pref_maxRetriesPerPackage
 import com.machiav3lli.backup.utils.SystemUtils
+import kotlinx.coroutines.CompletableDeferred
 import org.koin.java.KoinJavaComponent.get
 import timber.log.Timber
 import java.text.SimpleDateFormat
@@ -111,7 +114,7 @@ class WorkHandler(
         debugLog { "WorkHandler.endBatches() EXIT: cleanup complete" }
     }
 
-    fun beginBatch(batchName: String) {
+    fun beginBatch(batchName: String): BatchState {
         debugLog { "WorkHandler.beginBatch() ENTRY: batchName='$batchName'" }
         NeoApp.wakelock(true)
         if (batchesStarted < 0)
@@ -120,8 +123,13 @@ class WorkHandler(
         if (batchesStarted == 1)     // first batch in a series
             beginBatches()
         Timber.d("%%%%% $batchName begin, $batchesStarted batches, thread ${Thread.currentThread().id}")
-        batchesKnown.put(batchName, BatchState())
-        debugLog { "WorkHandler.beginBatch() EXIT: batchesStarted=$batchesStarted" }
+        
+        // Always create BatchState with completion signal
+        val batchState = BatchState(completionSignal = CompletableDeferred())
+        batchesKnown.put(batchName, batchState)
+        
+        debugLog { "WorkHandler.beginBatch() EXIT: batchesStarted=$batchesStarted, created BatchState with completion signal" }
+        return batchState
     }
 
     fun endBatch(batchName: String) {
@@ -129,8 +137,48 @@ class WorkHandler(
         batchesStarted--
         Timber.d("%%%%% $batchName end, $batchesStarted batches, thread ${Thread.currentThread().id}")
         Thread.sleep(endDelay)
+        
+        // Complete the batch's completion signal if present
+        batchesKnown[batchName]?.completionSignal?.let { signal ->
+            debugLog { "WorkHandler.endBatch() completing batch signal for '$batchName'" }
+            signal.complete(Unit)
+        }
+        
         NeoApp.wakelock(false)
         debugLog { "WorkHandler.endBatch() EXIT: batchesStarted=$batchesStarted (after decrement)" }
+    }
+
+    fun enqueueScheduledBackupBatch(
+        batchName: String,
+        packageNames: List<String>,
+        schedule: Schedule
+    ): BatchState {
+        debugLog { "WorkHandler.enqueueScheduledBackupBatch() ENTRY: batchName='$batchName', packageCount=${packageNames.size}" }
+        
+        // Register batch - creates and returns BatchState with completion signal
+        val batchState = beginBatch(batchName)
+        
+        // Generate unique notification ID for this batch
+        val notificationId = generateUniqueNotificationId()
+        
+        // Create work requests for all packages
+        val workRequests = packageNames.map { packageName ->
+            AppActionWork.Request(
+                packageName = packageName,
+                mode = schedule.mode ?: MODE_UNSET,
+                backupBoolean = true,
+                notificationId = notificationId,
+                batchName = batchName,
+                immediate = false,
+                backupModifiedOnly = schedule.backupModifiedOnly
+            )
+        }
+        
+        // Enqueue work
+        manager.beginWith(workRequests).enqueue()
+        
+        debugLog { "WorkHandler.enqueueScheduledBackupBatch() EXIT: enqueued ${workRequests.size} workers" }
+        return batchState
     }
 
     fun justFinishedAll(): Boolean {
@@ -261,7 +309,7 @@ class WorkHandler(
             var failed: Int = 0,
             var canceled: Int = 0,
             
-            // Backup statistics
+            // Backup statistics; Solf: not a great design as WorkHandler handles restore too, but expedient to have them here for the moment
             var backedUpCount: Int = 0,
             var skippedCount: Int = 0,
             var totalSize: Long = 0L,
@@ -273,6 +321,12 @@ class WorkHandler(
             var endTime: Long = 0L,
             var nFinished: Int = 0,
             var isCanceled: Boolean = false,
+            var completionSignal: kotlinx.coroutines.CompletableDeferred<Unit>? = null,
+            
+            // Backup statistics; Solf: not a great design as WorkHandler handles restore too, but expedient to have them here for the moment
+            var backedUpCount: Int = 0,
+            var skippedCount: Int = 0,
+            var totalSize: Long = 0L,
         )
 
         val batchesKnown = mutableMapOf<String, BatchState>()
@@ -581,6 +635,11 @@ class WorkHandler(
                         if (remaining <= 0) {
                             debugLog { "WorkHandler.onProgressNoSync() remaining <= 0: batch.nFinished=${batch.nFinished}" }
                             if (batch.nFinished == 0) {
+                                // Copy statistics from WorkState to BatchState before completing
+                                batch.backedUpCount = backedUpCount
+                                batch.skippedCount = skippedCount
+                                batch.totalSize = totalSize
+                                debugLog { "WorkHandler.onProgressNoSync() copied statistics to batch: backedUp=$backedUpCount, skipped=$skippedCount, size=$totalSize" }
                                 debugLog { "WorkHandler.onProgressNoSync() calling endBatch for '$batchName'" }
                                 workHandler.endBatch(batchName)
                             }

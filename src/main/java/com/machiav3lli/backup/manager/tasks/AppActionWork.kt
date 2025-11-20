@@ -85,117 +85,126 @@ class AppActionWork(val context: Context, workerParams: WorkerParameters) :
         val work = this
 
         return withContext(jobPool) {
-
-            if (!USE_CENTRALIZED_WAKELOCKS_INSTEAD_OF_PER_WORKER) {
-                NeoApp.wakelock(true)
-            }
-
-            if (pref_useForegroundInJob.value && !USE_CENTRALIZED_FOREGROUND_INSTEAD_OF_LEGACY) {               //TODO hg42 the service already does this?
-                //if (inputData.getBoolean("immediate", false))
-                debugLog { "[NOTIF-SHOW] AppActionWork.doWork() SHOWING foreground notification: packageName=$packageName, notificationId=$notificationId | ${getCompactStackTrace()}" }
-                setForeground(getForegroundInfo())
-                debugLog { "[NOTIF-SHOW] AppActionWork.doWork() foreground notification SHOWN: packageName=$packageName" }
-                //setForegroundAsync(getForegroundInfo())  //TODO hg42 what's the difference?
-            }
-
-            var actionResult: ActionResult? = null
-
-            setOperation("")
-
-            var logMessage =
-                "------------------------------------------------------------ Work: $batchName $packageName"
-            if (Android.minSDK(Build.VERSION_CODES.S)) {
-                logMessage += " ui=${context.isUiContext}"
-            }
-            Timber.i(logMessage)
-
-            val selectedMode = inputData.getInt("selectedMode", MODE_UNSET)
-
-            var packageItem: Package? = null
-
             try {
-                packageItem =
-                    context.getSpecial(packageName)
-                        ?: run {
-                            val foundItem =
-                                context.packageManager.getPackageInfo(
-                                    packageName,
-                                    PackageManager.GET_PERMISSIONS
-                                )
-                            Package(context, foundItem)
-                        }
-            } catch (e: PackageManager.NameNotFoundException) {
-                if (packageLabel.isEmpty())
-                    packageLabel = packageItem?.packageLabel ?: "$packageName (no label)"
-                packageItem = Package(context, packageName)
-            }
+                debugLog { "[WORKER-START] AppActionWork.doWork() ENTRY: packageName=$packageName, batchName=$batchName, backup=$backupBoolean | ${getCompactStackTrace()}" }
 
-            try {
-                if (!isStopped) {
+                if (!USE_CENTRALIZED_WAKELOCKS_INSTEAD_OF_PER_WORKER) {
+                    NeoApp.wakelock(true)
+                }
 
-                    packageItem?.let { pi ->
-                        try {
-                            NeoApp.shellHandler?.let { shellHandler ->
-                                actionResult = when {
-                                    backupBoolean -> {
-                                        BackupRestoreHelper.backup(
-                                            context, work, shellHandler, pi, selectedMode, backupModifiedOnly
-                                        )
-                                    }
+                if (pref_useForegroundInJob.value && !USE_CENTRALIZED_FOREGROUND_INSTEAD_OF_LEGACY) {               //TODO hg42 the service already does this?
+                    //if (inputData.getBoolean("immediate", false))
+                    debugLog { "[NOTIF-SHOW] AppActionWork.doWork() SHOWING foreground notification: packageName=$packageName, notificationId=$notificationId | ${getCompactStackTrace()}" }
+                    setForeground(getForegroundInfo())
+                    debugLog { "[NOTIF-SHOW] AppActionWork.doWork() foreground notification SHOWN: packageName=$packageName" }
+                    //setForegroundAsync(getForegroundInfo())  //TODO hg42 what's the difference?
+                }
 
-                                    else          -> {
-                                        pi.backupsNewestFirst[backupIndex].let {
-                                            BackupRestoreHelper.restore(
-                                                context, work,
-                                                shellHandler, pi,
-                                                selectedMode, it
+                var actionResult: ActionResult? = null
+
+                setOperation("")
+
+                var logMessage =
+                    "------------------------------------------------------------ Work: $batchName $packageName"
+                if (Android.minSDK(Build.VERSION_CODES.S)) {
+                    logMessage += " ui=${context.isUiContext}"
+                }
+                Timber.i(logMessage)
+
+                val selectedMode = inputData.getInt("selectedMode", MODE_UNSET)
+
+                var packageItem: Package? = null
+
+                try {
+                    packageItem =
+                        context.getSpecial(packageName)
+                            ?: run {
+                                val foundItem =
+                                    context.packageManager.getPackageInfo(
+                                        packageName,
+                                        PackageManager.GET_PERMISSIONS
+                                    )
+                                Package(context, foundItem)
+                            }
+                } catch (e: PackageManager.NameNotFoundException) {
+                    if (packageLabel.isEmpty())
+                        packageLabel = packageItem?.packageLabel ?: "$packageName (no label)"
+                    packageItem = Package(context, packageName)
+                }
+
+                try {
+                    if (!isStopped) {
+
+                        packageItem?.let { pi ->
+                            try {
+                                NeoApp.shellHandler?.let { shellHandler ->
+                                    actionResult = when {
+                                        backupBoolean -> {
+                                            BackupRestoreHelper.backup(
+                                                context, work, shellHandler, pi, selectedMode, backupModifiedOnly
                                             )
+                                        }
+
+                                        else          -> {
+                                            pi.backupsNewestFirst[backupIndex].let {
+                                                BackupRestoreHelper.restore(
+                                                    context, work,
+                                                    shellHandler, pi,
+                                                    selectedMode, it
+                                                )
+                                            }
                                         }
                                     }
                                 }
+                            } catch (e: Throwable) {
+                                val message = "package not processed: $packageName $packageLabel: $e\n${
+                                    LogsHandler.message(e, true)
+                                }"
+                                actionResult = ActionResult(pi, null, message, false)
+                                Timber.w(message)
                             }
-                        } catch (e: Throwable) {
-                            val message = "package not processed: $packageName $packageLabel: $e\n${
-                                LogsHandler.message(e, true)
-                            }"
-                            actionResult = ActionResult(pi, null, message, false)
-                            Timber.w(message)
                         }
                     }
+                } catch (e: Throwable) {
+                    debugLog { "[WORKER-EXCEPTION] AppActionWork.doWork() caught exception: packageName=$packageName, exception=${e.javaClass.simpleName}: ${e.message}" }
+                    LogsHandler.unexpectedException(e, packageLabel)
                 }
-            } catch (e: Throwable) {
-                LogsHandler.unexpectedException(e, packageLabel)
-            }
 
-            val succeeded = actionResult?.succeeded ?: false
-            val result = if (succeeded) {
-                setOperation("======>OK")
-                Timber.w("package: $packageName OK")
-                Result.success(getWorkData("OK", actionResult))
-            } else {
-                failures++
-                setVar(batchName, packageName, "failures", failures.toString())
-                if (failures <= pref_maxRetriesPerPackage.value) {
-                    setOperation("======>fail")
-                    Timber.w("package: $packageName failures: $failures -> retry")
-                    Result.retry()
+                val succeeded = actionResult?.succeeded ?: false
+                val result = if (succeeded) {
+                    setOperation("======>OK")
+                    Timber.w("package: $packageName OK")
+                    debugLog { "[WORKER-SUCCESS] AppActionWork.doWork() succeeded: packageName=$packageName" }
+                    Result.success(getWorkData("OK", actionResult))
                 } else {
-                    val message = "$packageName\n${actionResult?.message}"
-                    showNotification(
-                        context, NeoActivity::class.java,
-                        actionResult.hashCode(), packageLabel, actionResult?.message, message, false
-                    )
-                    setOperation("======>FAIL")
-                    Timber.w("package: $packageName FAILED")
-                    Result.failure(getWorkData("ERR", actionResult))
+                    failures++
+                    setVar(batchName, packageName, "failures", failures.toString())
+                    if (failures <= pref_maxRetriesPerPackage.value) {
+                        setOperation("======>fail")
+                        Timber.w("package: $packageName failures: $failures -> retry")
+                        debugLog { "[WORKER-RETRY] AppActionWork.doWork() retrying: packageName=$packageName, failures=$failures/${pref_maxRetriesPerPackage.value}" }
+                        Result.retry()
+                    } else {
+                        val message = "$packageName\n${actionResult?.message}"
+                        showNotification(
+                            context, NeoActivity::class.java,
+                            actionResult.hashCode(), packageLabel, actionResult?.message, message, false
+                        )
+                        setOperation("======>FAIL")
+                        Timber.w("package: $packageName FAILED")
+                        debugLog { "[WORKER-FAILURE] AppActionWork.doWork() failed permanently: packageName=$packageName, message=${actionResult?.message}" }
+                        Result.failure(getWorkData("ERR", actionResult))
+                    }
                 }
-            }
 
-            if (!USE_CENTRALIZED_WAKELOCKS_INSTEAD_OF_PER_WORKER) {
-                NeoApp.wakelock(false)
-            }
+                if (!USE_CENTRALIZED_WAKELOCKS_INSTEAD_OF_PER_WORKER) {
+                    NeoApp.wakelock(false)
+                }
 
-            result
+                result
+            } finally {
+                debugLog { "[WORKER-EXIT] AppActionWork.doWork() exiting: packageName=$packageName" }
+            }
         }
     }
 
