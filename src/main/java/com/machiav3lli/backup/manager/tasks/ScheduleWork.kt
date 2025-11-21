@@ -222,7 +222,7 @@ class ScheduleWork(
             if (selectedItems.isEmpty()) {
                 debugLog { "processSchedule() EXIT: selectedItems is empty, returning null" }
                 handleEmptySelectedItems(name)
-                ScheduleLogHandler.writeScheduleEnd(name, 0, 0, 0, java.time.LocalDateTime.now())
+                ScheduleLogHandler.writeScheduleEnd(name, 0, 0, 0, 0, java.time.LocalDateTime.now())
                 return@coroutineScope null
             }
 
@@ -291,11 +291,12 @@ class ScheduleWork(
                     selectedItems.fastForEach {
                         packageRepo.updatePackage(it)
                     }
-                    debugLog { "processSchedule() calling writeScheduleEnd: backedUp=$backedUpCount, skipped=$skippedCount, size=$totalSize" }
+                    debugLog { "processSchedule() calling writeScheduleEnd: backedUp=$backedUpCount, skipped=$skippedCount, $failed failed, size=$totalSize" }
                     ScheduleLogHandler.writeScheduleEnd(
                         scheduleName = name,
                         backedUpCount = backedUpCount,
                         skippedCount = skippedCount,
+                        failedCount = failed,
                         totalSizeBytes = totalSize,
                         timestamp = java.time.LocalDateTime.now()
                     )

@@ -91,10 +91,11 @@ class ScheduleLogHandler {
             scheduleName: String,
             backedUpCount: Int,
             skippedCount: Int,
+            failedCount: Int,
             totalSizeBytes: Long,
             timestamp: LocalDateTime
         ) {
-            debugLog { "ScheduleLogHandler.writeScheduleEnd() scheduleName='$scheduleName', backedUp=$backedUpCount, skipped=$skippedCount, size=$totalSizeBytes" }
+            debugLog { "ScheduleLogHandler.writeScheduleEnd() scheduleName='$scheduleName', backedUp=$backedUpCount, skipped=$skippedCount, failed=$failedCount, size=$totalSizeBytes" }
             val logFile = getScheduleLogFile()
             if (logFile == null) {
                 debugLog { "ScheduleLogHandler.writeScheduleEnd() FAILED: logFile is NULL" }
@@ -106,7 +107,8 @@ class ScheduleLogHandler {
                 
                 // Add schedule name at end with extra spacing to make it visually separate
                 val scheduleTag = if (scheduleName.isNotEmpty()) "    | [$scheduleName]" else ""
-                val summary = "[$timeStr] Completed: $backedUpCount backed up, $skippedCount skipped - Total: $totalSize$scheduleTag\n"
+                val total = backedUpCount + skippedCount + failedCount
+                val summary = "[$timeStr] Completed: $total total, $backedUpCount backed up, $skippedCount skipped, $failedCount failed - new backups size: $totalSize$scheduleTag\n"
                 
                 logFile.appendText(summary)
                 debugLog { "ScheduleLogHandler.writeScheduleEnd() SUCCESS" }
