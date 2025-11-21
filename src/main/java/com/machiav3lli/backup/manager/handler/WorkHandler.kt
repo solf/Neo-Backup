@@ -140,10 +140,18 @@ class WorkHandler(
         Timber.d("%%%%% $batchName end, $batchesStarted batches, thread ${Thread.currentThread().id}")
         Thread.sleep(endDelay)
         
-        // Complete the batch's completion signal if present
-        batchesKnown[batchName]?.completionSignal?.let { signal ->
-            debugLog { "WorkHandler.endBatch() completing batch signal for '$batchName'" }
-            signal.complete(Unit)
+        val batch = batchesKnown[batchName]
+        
+        if (batch != null) {
+            val signal = batch.completionSignal
+            if (signal != null) {
+                // Query WorkContinuation for batch results
+                val workInfos = batch.workContinuation?.workInfos?.get() ?: emptyList()
+                debugLog { "WorkHandler.endBatch() queried continuation: ${workInfos.size} WorkInfo objects" }
+            
+                debugLog { "WorkHandler.endBatch() completing batch signal for '$batchName' with ${workInfos.size} WorkInfo objects" }
+                signal.complete(workInfos)  // Pass the list
+            }
         }
         
         NeoApp.wakelock(false)
@@ -178,14 +186,12 @@ class WorkHandler(
             )
         }
         
-        // Create WorkTask wrappers for each request
-        val workTasks = workRequests.map { request ->
-            WorkTask(manager, request.id)
-        }
-        batchState.tasks.addAll(workTasks)
+        // Create and store WorkContinuation
+        val continuation = manager.beginWith(workRequests)
+        batchState.workContinuation = continuation
         
         // Enqueue work
-        manager.beginWith(workRequests).enqueue()
+        continuation.enqueue()
         
         debugLog { "WorkHandler.enqueueScheduledBackupBatch() EXIT: enqueued ${workRequests.size} workers" }
         return batchState
@@ -212,15 +218,13 @@ class WorkHandler(
         // Register batch - creates and returns BatchState with completion signal
         val batchState = beginBatch(batchName)
         
-        // Create WorkTask wrappers for each request
-        val workTasks = workRequests.map { request ->
-            WorkTask(manager, request.id)
-        }
-        batchState.tasks.addAll(workTasks)
+        // Create and store WorkContinuation
+        val continuation = manager.beginWith(workRequests)
+        batchState.workContinuation = continuation
         
         // Enqueue work if there are any requests
         if (workRequests.isNotEmpty()) {
-            manager.beginWith(workRequests).enqueue()
+            continuation.enqueue()
         }
         
         debugLog { "WorkHandler.enqueueUIBatchOperation() EXIT: enqueued ${workRequests.size} workers" }
@@ -362,10 +366,10 @@ class WorkHandler(
             var endTime: Long = 0L,
             var nFinished: Int = 0,
             var isCanceled: Boolean = false,
-            var completionSignal: kotlinx.coroutines.CompletableDeferred<Unit>? = null,
+            var completionSignal: kotlinx.coroutines.CompletableDeferred<List<androidx.work.WorkInfo>>? = null,
             
-            // Task references for callers to query results
-            val tasks: MutableList<WorkTask> = mutableListOf(),
+            // WorkContinuation handle to query batch results
+            var workContinuation: androidx.work.WorkContinuation? = null,
         )
 
         val batchesKnown = mutableMapOf<String, BatchState>()

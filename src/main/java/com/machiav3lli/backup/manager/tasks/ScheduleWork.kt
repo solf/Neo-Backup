@@ -251,26 +251,39 @@ class ScheduleWork(
                 if (beginSchedule(name, "queueing work")) {
                     debugLog { "processSchedule() awaiting WorkHandler batch completion signal" }
                     val awaitStartTime = System.currentTimeMillis()
-                    batchState.completionSignal!!.await()
+                    val workInfos = batchState.completionSignal!!.await()  // Receives List<WorkInfo>
                     val awaitElapsed = System.currentTimeMillis() - awaitStartTime
-                    debugLog { "processSchedule() batch completion signal received after ${awaitElapsed}ms" }
+                    debugLog { "processSchedule() batch completion signal received after ${awaitElapsed}ms with ${workInfos.size} WorkInfo objects" }
                     
-                    // Calculate statistics from task results
-                    val allTasks = batchState.tasks
-                    val succeeded = allTasks.count { it.isSucceeded() }
-                    val failed = allTasks.count { it.isFailed() }
-                    val cancelled = allTasks.count { it.isCancelled() }
+                    // Calculate statistics from WorkInfo list
+                    val succeeded = workInfos.count { it.state == androidx.work.WorkInfo.State.SUCCEEDED }
+                    val failed = workInfos.count { it.state == androidx.work.WorkInfo.State.FAILED }
+                    val cancelled = workInfos.count { it.state == androidx.work.WorkInfo.State.CANCELLED }
                     
-                    val backupTasks = allTasks.filter { it.isBackup() && it.isSucceeded() }
-                    val backedUpCount = backupTasks.count { !it.isSkipped() && it.getBackupSize() > 0 }
-                    val skippedCount = backupTasks.count { it.isSkipped() }
-                    val totalSize = backupTasks.sumOf { it.getBackupSize() }
+                    // Calculate backup-specific statistics
+                    val succeededBackupInfos = workInfos.filter { 
+                        it.state == androidx.work.WorkInfo.State.SUCCEEDED && 
+                        it.outputData.getBoolean("backupBoolean", false)
+                    }
                     
-                    debugLog { "processSchedule() calculated statistics: total=${allTasks.size}, succeeded=$succeeded, failed=$failed, cancelled=$cancelled, backedUp=$backedUpCount, skipped=$skippedCount, size=$totalSize" }
+                    val backedUpCount = succeededBackupInfos.count { info ->
+                        val backupSize = info.outputData.getLong("backupSize", 0L)
+                        val error = info.outputData.getString("error") ?: ""
+                        backupSize > 0 && !error.contains("Skipped", ignoreCase = true)
+                    }
+                    
+                    val skippedCount = succeededBackupInfos.count { info ->
+                        val error = info.outputData.getString("error") ?: ""
+                        error.contains("Skipped", ignoreCase = true)
+                    }
+                    
+                    val totalSize = succeededBackupInfos.sumOf { it.outputData.getLong("backupSize", 0L) }
+                    
+                    debugLog { "processSchedule() calculated statistics: total=${workInfos.size}, succeeded=$succeeded, failed=$failed, cancelled=$cancelled, backedUp=$backedUpCount, skipped=$skippedCount, size=$totalSize" }
                     
                     // Log summary to schedules.log
                     traceSchedule {
-                        "[$scheduleId] '$name' completed: ${allTasks.size} packages, $backedUpCount backed up, $skippedCount skipped, $failed failed, ${totalSize / 1024}KB total"
+                        "[$scheduleId] '$name' completed: ${workInfos.size} packages, $backedUpCount backed up, $skippedCount skipped, $failed failed, ${totalSize / 1024}KB total"
                     }
                     
                     // Write completion to schedule log
