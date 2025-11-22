@@ -268,10 +268,20 @@ data class Package private constructor(val packageName: String) : KoinComponent 
                     if (appBackupBaseDir == null) {
                         debugLog { "[ApkDedup] <$packageName>: DELETE_SKIP - appBackupBaseDir is null" }
                     } else {
-                        val apkDir = appBackupBaseDir.findFileByPath(apkStorageDir)
+                        debugLog { "[ApkDedup] <$packageName>: DELETE_PATH - appBackupBaseDir=${appBackupBaseDir.path}, looking for $apkStorageDir" }
+                        var apkDir = appBackupBaseDir.findFileByPath(apkStorageDir)
                         if (apkDir == null) {
-                            debugLog { "[ApkDedup] <$packageName>: DELETE_SKIP - APK dir not found: $apkStorageDir" }
-                        } else {
+                            debugLog { "[ApkDedup] <$packageName>: DELETE_NOTFOUND - first attempt failed, invalidating cache and retrying" }
+                            StorageFile.invalidateCache(appBackupBaseDir)
+                            apkDir = appBackupBaseDir.findFileByPath(apkStorageDir)
+                            if (apkDir == null) {
+                                debugLog { "[ApkDedup] <$packageName>: DELETE_SKIP - still not found after cache invalidation: $apkStorageDir" }
+                            } else {
+                                debugLog { "[ApkDedup] <$packageName>: DELETE_FOUND - found after cache invalidation" }
+                            }
+                        }
+                        
+                        if (apkDir != null) {
                             traceBackups { "<$packageName> Cleaning up unreferenced APK directory: $apkStorageDir" }
                             debugLog { "[ApkDedup] <$packageName>: DELETE - $apkStorageDir (refs=0)" }
                             runOrLog { apkDir.deleteRecursive() }
