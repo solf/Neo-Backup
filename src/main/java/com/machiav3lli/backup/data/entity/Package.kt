@@ -265,8 +265,11 @@ data class Package private constructor(val packageName: String) : KoinComponent 
                     val appBackupBaseDir = getAppBackupBaseDir(create = false)
                     appBackupBaseDir?.findFile(apkStorageDir)?.let { apkDir ->
                         traceBackups { "<$packageName> Cleaning up unreferenced APK directory: $apkStorageDir" }
+                        debugLog { "[ApkDedup] <$packageName>: DELETE - $apkStorageDir (refs=0)" }
                         runOrLog { apkDir.deleteRecursive() }
                     }
+                } else {
+                    debugLog { "[ApkDedup] <$packageName>: KEEP - $apkStorageDir (refs=$referenceCount)" }
                 }
             } catch (e: Throwable) {
                 // Log error but don't fail backup deletion

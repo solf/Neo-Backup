@@ -38,6 +38,7 @@ import com.machiav3lli.backup.data.plugins.InternalShellScriptPlugin
 import com.machiav3lli.backup.manager.handler.PGPHandler
 import com.machiav3lli.backup.manager.handler.ShellCommands
 import com.machiav3lli.backup.manager.handler.ShellHandler
+import com.machiav3lli.backup.manager.handler.debugLog
 import com.machiav3lli.backup.manager.handler.ShellHandler.Companion.hasPmBypassLowTargetSDKBlock
 import com.machiav3lli.backup.manager.handler.ShellHandler.Companion.quote
 import com.machiav3lli.backup.manager.handler.ShellHandler.Companion.quoteMultiple
@@ -235,10 +236,12 @@ open class RestoreAppAction(context: Context, work: AppActionWork?, shell: Shell
                     null
                 )
             Timber.i("<$packageName> Using deduplicated APKs from: $apkStorageDir")
+            debugLog { "[ApkDedup] <$packageName>: RESTORE - $apkStorageDir" }
             resolvedApkDir
         } else {
             // Old backup format - APKs are in backup instance directory
             Timber.d("<$packageName> Using APKs from backup instance directory (legacy format)")
+            debugLog { "[ApkDedup] <$packageName>: RESTORE - legacy (no dedup)" }
             backupDir
         }
 

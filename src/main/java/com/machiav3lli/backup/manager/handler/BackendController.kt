@@ -259,15 +259,21 @@ suspend fun scanBackups(
             }
             
             // Check each APK dedup directory
+            var orphanCount = 0
             apkSubDir.listFiles().forEach { apkVersionDir ->
                 if (apkVersionDir.isDirectory) {
                     val relativePath = "apk/${apkVersionDir.name}"
                     if (relativePath !in referencedApkDirs) {
                         // Orphaned APK directory - mark for cleanup
                         NeoApp.hitBusy()
+                        debugLog { "[ApkDedup] ${packageDir.name}: ORPHAN - ${apkVersionDir.name}" }
                         renameDamagedToERROR(apkVersionDir, "orphaned-apk")
+                        orphanCount++
                     }
                 }
+            }
+            if (orphanCount > 0) {
+                debugLog { "[ApkDedup] ${packageDir.name}: found $orphanCount orphaned APK director${if (orphanCount == 1) "y" else "ies"}" }
             }
         }
     }
