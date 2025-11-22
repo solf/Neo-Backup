@@ -53,6 +53,19 @@ object ApkDeduplicationHelper {
     }
 
     /**
+     * Sanitize version name for use in filesystem paths
+     * Replaces any character not alphanumeric, period, hyphen, or underscore with underscore
+     * Trims to maximum 50 characters
+     */
+    private fun sanitizeVersionName(versionName: String?): String {
+        if (versionName.isNullOrBlank()) return "unknown"
+        // Replace anything not alphanumeric, period, hyphen, or underscore with underscore
+        val sanitized = versionName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+        // Trim to max 50 chars
+        return sanitized.take(50)
+    }
+
+    /**
      * Calculate short hash suffix from all APK files
      * Hashes first 1MB of each APK part (or entire file if smaller) plus file size
      * Returns last 8 characters of SHA-256 hash
@@ -109,13 +122,13 @@ object ApkDeduplicationHelper {
     }
 
     /**
-     * Generate dedup directory name from version code and APK hash
+     * Generate dedup directory name from version name, version code, and APK hash
      * Hashes first 1MB of all APK parts for reliable uniqueness
-     * Format: {versionCode}_{hashSuffix}
+     * Format: {sanitizedVersionName}_{versionCode}_{hashSuffix}
      */
-    fun getApkDedupDirName(versionCode: Int, apkPaths: Array<String>): String {
+    fun getApkDedupDirName(versionName: String?, versionCode: Int, apkPaths: Array<String>): String {
         val hashSuffix = calculateApkHashSuffix(apkPaths)
-        return "${versionCode}_${hashSuffix}"
+        return "${sanitizeVersionName(versionName)}_${versionCode}_${hashSuffix}"
     }
 
     /**
@@ -174,10 +187,10 @@ object ApkDeduplicationHelper {
 
     /**
      * Get relative path to APK dedup directory within app backup directory
-     * Format: apk/{versionCode}_{hashSuffix}
+     * Format: apk/{sanitizedVersionName}_{versionCode}_{hashSuffix}
      */
-    fun getRelativeApkPath(versionCode: Int, apkPaths: Array<String>): String {
-        return "apk/${getApkDedupDirName(versionCode, apkPaths)}"
+    fun getRelativeApkPath(versionName: String?, versionCode: Int, apkPaths: Array<String>): String {
+        return "apk/${getApkDedupDirName(versionName, versionCode, apkPaths)}"
     }
 
     /**
