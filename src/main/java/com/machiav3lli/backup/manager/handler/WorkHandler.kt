@@ -10,7 +10,6 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.text.Html
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.setValue
 import androidx.core.app.NotificationCompat
@@ -18,6 +17,8 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.work.OneTimeWorkRequest
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 import com.machiav3lli.backup.MODE_UNSET
 import com.machiav3lli.backup.NeoApp
 import com.machiav3lli.backup.R
@@ -104,7 +105,7 @@ class WorkHandler(
                 }
             }
         }
-        batchPackageVars = mutableMapOf()
+        batchPackageVars = ConcurrentHashMap()
 
         //OABX.setProgress()
 
@@ -119,25 +120,26 @@ class WorkHandler(
     fun beginBatch(batchName: String): BatchState {
         debugLog { "WorkHandler.beginBatch() ENTRY: batchName='$batchName' | ${getCompactStackTrace()}" }
         NeoApp.wakelock(true)
-        if (batchesStarted < 0)
-            batchesStarted = 0
-        batchesStarted++
-        if (batchesStarted == 1)     // first batch in a series
+        // Atomically: if negative (locked), reset to 0, then increment
+        val currentCount = batchesStarted.updateAndGet { current ->
+            if (current < 0) 1 else current + 1
+        }
+        if (currentCount == 1)     // first batch in a series
             beginBatches()
-        Timber.d("%%%%% $batchName begin, $batchesStarted batches, thread ${Thread.currentThread().id}")
+        Timber.d("%%%%% $batchName begin, ${batchesStarted.get()} batches, thread ${Thread.currentThread().id}")
         
         // Always create BatchState with completion signal
         val batchState = BatchState(completionSignal = CompletableDeferred())
         batchesKnown.put(batchName, batchState)
         
-        debugLog { "WorkHandler.beginBatch() EXIT: batchesStarted=$batchesStarted, created BatchState with completion signal" }
+        debugLog { "WorkHandler.beginBatch() EXIT: batchesStarted=${batchesStarted.get()}, created BatchState with completion signal" }
         return batchState
     }
 
     fun endBatch(batchName: String) {
-        debugLog { "WorkHandler.endBatch() ENTRY: batchName='$batchName', batchesStarted=$batchesStarted | ${getCompactStackTrace()}" }
-        batchesStarted--
-        Timber.d("%%%%% $batchName end, $batchesStarted batches, thread ${Thread.currentThread().id}")
+        debugLog { "WorkHandler.endBatch() ENTRY: batchName='$batchName', batchesStarted=${batchesStarted.get()} | ${getCompactStackTrace()}" }
+        batchesStarted.decrementAndGet()
+        Timber.d("%%%%% $batchName end, ${batchesStarted.get()} batches, thread ${Thread.currentThread().id}")
         Thread.sleep(endDelay)
         
         val batch = batchesKnown[batchName]
@@ -155,7 +157,7 @@ class WorkHandler(
         }
         
         NeoApp.wakelock(false)
-        debugLog { "WorkHandler.endBatch() EXIT: batchesStarted=$batchesStarted (after decrement)" }
+        debugLog { "WorkHandler.endBatch() EXIT: batchesStarted=${batchesStarted.get()} (after decrement)" }
     }
 
     fun enqueueScheduledBackupBatch(
@@ -232,15 +234,12 @@ class WorkHandler(
     }
 
     fun justFinishedAll(): Boolean {
-        val result = if (batchesStarted == 0) {  // do this exactly once
-            debugLog { "WorkHandler.justFinishedAll() ALL BATCHES FINISHED: batchesStarted=0, returning true" }
-            batchesStarted--        // now lock this (counter < 0)
-            true
+        // Atomically check if counter is 0 and set to -1 (locked state)
+        val result = batchesStarted.compareAndSet(0, -1)
+        if (result) {
+            debugLog { "WorkHandler.justFinishedAll() ALL BATCHES FINISHED: batchesStarted was 0, set to -1, returning true" }
         } else {
-            false
-        }
-        if (!result) {
-            debugLog { "WorkHandler.justFinishedAll() NOT finished: batchesStarted=$batchesStarted, returning false" }
+            debugLog { "WorkHandler.justFinishedAll() NOT finished: batchesStarted=${batchesStarted.get()}, returning false" }
         }
         return result
     }
@@ -327,16 +326,16 @@ class WorkHandler(
             tags.add("$name:$value")
         }
 
-        var batchPackageVars: MutableMap<String, MutableMap<String, MutableMap<String, String>>> =
-            mutableMapOf()
+        var batchPackageVars: ConcurrentHashMap<String, ConcurrentHashMap<String, ConcurrentHashMap<String, String>>> =
+            ConcurrentHashMap()
 
         fun getVar(batchName: String, packageName: String, name: String): String? {
             return batchPackageVars.get(batchName)?.get(packageName)?.get(name)
         }
 
         fun setVar(batchName: String, packageName: String, name: String, value: String) {
-            batchPackageVars.getOrPut(batchName) { mutableMapOf() }
-                .getOrPut(packageName) { mutableMapOf() }
+            batchPackageVars.getOrPut(batchName) { ConcurrentHashMap() }
+                .getOrPut(packageName) { ConcurrentHashMap() }
                 .put(name, value)
         }
 
@@ -365,20 +364,31 @@ class WorkHandler(
             var totalSize: Long = 0L,
         )
 
+        /**
+         * BatchState holds mutable state for a batch operation.
+         * 
+         * Thread-safety: Uses @Volatile for memory visibility across threads.
+         * Note: This is not ideal design - individual @Volatile fields don't guarantee
+         * atomicity of compound operations. Most accesses are protected by lockProgress
+         * synchronization in onProgress(). Future refactoring should consider either:
+         * - Full synchronization of all reads/writes using a single lock
+         * - Immutable design with AtomicReference for updates
+         * - Encapsulated locking within BatchState itself
+         */
         class BatchState(
-            var notificationId: Int = 0,
-            var startTime: Long = 0L,
-            var endTime: Long = 0L,
-            var nFinished: Int = 0,
-            var isCanceled: Boolean = false,
-            var completionSignal: kotlinx.coroutines.CompletableDeferred<List<androidx.work.WorkInfo>>? = null,
+            @Volatile var notificationId: Int = 0,
+            @Volatile var startTime: Long = 0L,
+            @Volatile var endTime: Long = 0L,
+            @Volatile var nFinished: Int = 0,
+            @Volatile var isCanceled: Boolean = false,
+            @Volatile var completionSignal: kotlinx.coroutines.CompletableDeferred<List<androidx.work.WorkInfo>>? = null,
             
             // WorkContinuation handle to query batch results
-            var workContinuation: androidx.work.WorkContinuation? = null,
+            @Volatile var workContinuation: androidx.work.WorkContinuation? = null,
         )
 
-        val batchesKnown = mutableMapOf<String, BatchState>()
-        var batchesStarted by mutableIntStateOf(-1)
+        val batchesKnown = ConcurrentHashMap<String, BatchState>()
+        val batchesStarted = AtomicInteger(-1)
         var packagesState = mutableStateMapOf<String, String>()
 
         var lockProgress = object {}
@@ -705,7 +715,7 @@ class WorkHandler(
                 val workHandler = get<WorkHandler>(WorkHandler::class.java)
                 if (workHandler.justFinishedAll()) {
                     debugLog { "WorkHandler.onProgressNoSync() calling endBatches()" }
-                    Timber.d("%%%%% ALL $batchesStarted batches, thread ${Thread.currentThread().id}")
+                    Timber.d("%%%%% ALL ${batchesStarted.get()} batches, thread ${Thread.currentThread().id}")
                     workHandler.endBatches()
                 }
             }
