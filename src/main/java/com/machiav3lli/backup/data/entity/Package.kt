@@ -270,6 +270,7 @@ data class Package private constructor(val packageName: String) : KoinComponent 
                     } else {
                         debugLog { "[ApkDedup] <$packageName>: DELETE_PATH - appBackupBaseDir=${appBackupBaseDir.path}, looking for $apkStorageDir" }
                         var apkDir = appBackupBaseDir.findFileByPath(apkStorageDir)
+                        // 2025-11-22 solf: I have no idea why it can be null here, but cache invalidation helps
                         if (apkDir == null) {
                             debugLog { "[ApkDedup] <$packageName>: DELETE_NOTFOUND - first attempt failed, invalidating cache and retrying" }
                             StorageFile.invalidateCache(appBackupBaseDir)

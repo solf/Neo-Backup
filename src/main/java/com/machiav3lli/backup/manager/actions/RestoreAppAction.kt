@@ -235,6 +235,7 @@ open class RestoreAppAction(context: Context, work: AppActionWork?, shell: Shell
             
             var resolvedApkDir = appBackupBaseDir.findFileByPath(apkStorageDir)
             if (resolvedApkDir == null) {
+                // 2025-11-22 solf: I have no idea if this is necessary, but had cache issues in deletion, so add fallback here too
                 debugLog { "[ApkDedup] <$packageName>: RESTORE_NOTFOUND - first attempt failed, invalidating cache and retrying" }
                 StorageFile.invalidateCache(appBackupBaseDir)
                 resolvedApkDir = appBackupBaseDir.findFileByPath(apkStorageDir)
