@@ -248,6 +248,35 @@ data class Package private constructor(val packageName: String) : KoinComponent 
             if (isPlausiblePath(parent.path))
                 runCatching { it.delete() }   // delete the directory (but never the contents)
         }
+        
+        // Clean up deduplicated APK directory if no longer referenced
+        val apkStorageDir = backup.apkStorageDir
+        if (apkStorageDir != null) {
+            try {
+                // Count references in remaining backups (excluding the one being deleted)
+                val remainingBackups = backupList.filter { it.backupDate != backup.backupDate }
+                val referenceCount = com.machiav3lli.backup.utils.ApkDeduplicationHelper.countReferences(
+                    remainingBackups,
+                    apkStorageDir
+                )
+                
+                if (referenceCount == 0) {
+                    // No other backups reference this APK directory - safe to delete
+                    val appBackupBaseDir = getAppBackupBaseDir(create = false)
+                    appBackupBaseDir?.findFile(apkStorageDir)?.let { apkDir ->
+                        traceBackups { "<$packageName> Cleaning up unreferenced APK directory: $apkStorageDir" }
+                        runOrLog { apkDir.deleteRecursive() }
+                    }
+                }
+            } catch (e: Throwable) {
+                // Log error but don't fail backup deletion
+                com.machiav3lli.backup.manager.handler.LogsHandler.logException(
+                    e,
+                    "<$packageName> Failed to cleanup APK directory: $apkStorageDir"
+                )
+            }
+        }
+        
         if (!pref_paranoidBackupLists.value)
             runOrLog {
                 removeBackupFromList(backup)

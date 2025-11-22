@@ -221,6 +221,57 @@ suspend fun scanBackups(
         }
     }
 
+    /**
+     * Check and cleanup orphaned APK directories in package backup directory
+     * Called during CLEANUP operation
+     */
+    fun checkOrphanedApkDirectories(packageDir: StorageFile) {
+        if (damagedOp != DamagedOp.CLEANUP) return
+        
+        runCatching {
+            // Find apk subdirectory
+            val apkSubDir = packageDir.findFile("apk") ?: return@runCatching
+            if (!apkSubDir.isDirectory) return@runCatching
+            
+            // Get all property files in package directory
+            val propertyFiles = packageDir.listFiles()
+                .filter { it.isPropertyFile || 
+                         (it.isDirectory && it.findFile(BACKUP_INSTANCE_PROPERTIES_INDIR) != null) }
+            
+            // Collect all referenced APK directories
+            val referencedApkDirs = mutableSetOf<String>()
+            for (propFile in propertyFiles) {
+                try {
+                    val actualPropFile = if (propFile.isDirectory) {
+                        propFile.findFile(BACKUP_INSTANCE_PROPERTIES_INDIR) ?: continue
+                    } else {
+                        propFile
+                    }
+                    
+                    val apkStorageDir = com.machiav3lli.backup.utils.ApkDeduplicationHelper
+                        .parseApkStorageDirFromProperties(actualPropFile)
+                    if (apkStorageDir != null) {
+                        referencedApkDirs.add(apkStorageDir)
+                    }
+                } catch (e: Throwable) {
+                    // Ignore errors reading individual property files
+                }
+            }
+            
+            // Check each APK dedup directory
+            apkSubDir.listFiles().forEach { apkVersionDir ->
+                if (apkVersionDir.isDirectory) {
+                    val relativePath = "apk/${apkVersionDir.name}"
+                    if (relativePath !in referencedApkDirs) {
+                        // Orphaned APK directory - mark for cleanup
+                        NeoApp.hitBusy()
+                        renameDamagedToERROR(apkVersionDir, "orphaned-apk")
+                    }
+                }
+            }
+        }
+    }
+
     suspend fun handleInvalidProps(
         dir: StorageFile,
         file: StorageFile? = null,
@@ -475,6 +526,11 @@ suspend fun scanBackups(
 
                             if (handleDirectory(dir).not()) {
                                 // renameDamagedToERROR(dir, "empty-folder")
+                            }
+                            
+                            // Check for orphaned APK directories during cleanup
+                            if (damagedOp == DamagedOp.CLEANUP && name.contains(regexPackageFolder)) {
+                                checkOrphanedApkDirectories(dir)
                             }
                         }
                     }

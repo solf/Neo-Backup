@@ -48,6 +48,7 @@ import com.machiav3lli.backup.manager.handler.ShellHandler.ShellCommandFailedExc
 import com.machiav3lli.backup.manager.tasks.AppActionWork
 import com.machiav3lli.backup.ui.pages.pref_backupCache
 import com.machiav3lli.backup.ui.pages.pref_backupPauseApps
+import com.machiav3lli.backup.utils.ApkDeduplicationHelper
 import com.machiav3lli.backup.ui.pages.pref_backupTarCmd
 import com.machiav3lli.backup.ui.pages.pref_fakeBackupSeconds
 import com.machiav3lli.backup.utils.CIPHER_ALGORITHM
@@ -156,7 +157,7 @@ open class BackupAppAction(context: Context, work: AppActionWork?, shell: ShellH
                     }
                 }
                 doBackup(MODE_APK) {
-                    backupPackage(app, backupInstanceDir)
+                    backupPackage(app, backupInstanceDir, appBackupBaseDir, backupBuilder)
                     backupBuilder.setHasApk(true)
                 }
                 doBackup(MODE_DATA) {
@@ -503,7 +504,12 @@ open class BackupAppAction(context: Context, work: AppActionWork?, shell: ShellH
     }
 
     @Throws(BackupFailedException::class)
-    protected open fun backupPackage(app: Package, backupInstanceDir: StorageFile) {
+    protected open fun backupPackage(
+        app: Package,
+        backupInstanceDir: StorageFile,
+        appBackupBaseDir: StorageFile,
+        backupBuilder: BackupBuilder
+    ) {
         Timber.i("<${app.packageName}> Backup package apks")
         var apksToBackup = arrayOf(app.apkPath)
         if (app.apkSplits.isEmpty()) {
@@ -518,17 +524,65 @@ open class BackupAppAction(context: Context, work: AppActionWork?, shell: ShellH
             apksToBackup.size,
             apksToBackup.joinToString(" ") { s: String -> RootFile(s).name }
         )
-        for (apk in apksToBackup) {
+
+        // Implement deduplication with per-package locking
+        ApkDeduplicationHelper.withPackageApkLock(app.packageName) {
             try {
-                Timber.i("${app.packageName}: $apk")
-                //TODO wech suCopyFileToDocument(apk, backupInstanceDir)
-                copyRootFileToDocument(apk, backupInstanceDir, RootFile(apk).name)
-            } catch (e: IOException) {
-                Timber.e("$app: Could not backup apk $apk: $e")
-                throw BackupFailedException("Could not backup apk $apk", e)
+                // Generate dedup directory name from APK metadata (fast - no file reading)
+                val dedupDirName = ApkDeduplicationHelper.getApkDedupDirName(
+                    app.versionCode,
+                    apksToBackup
+                )
+                val apkSubDir = appBackupBaseDir.findFile("apk")
+                    ?: appBackupBaseDir.createDirectory("apk")
+                val dedupDir = apkSubDir?.findFile(dedupDirName)
+
+                // Check if deduplicated APK directory already exists
+                if (dedupDir != null && dedupDir.exists() &&
+                    ApkDeduplicationHelper.verifyApkMatch(dedupDir, apksToBackup)
+                ) {
+                    // APK already exists and matches - just store reference
+                    val relativePath = ApkDeduplicationHelper.getRelativeApkPath(
+                        app.versionCode,
+                        apksToBackup
+                    )
+                    backupBuilder.setApkStorageDir(relativePath)
+                    Timber.i("<${app.packageName}> APK already deduplicated at: $relativePath")
+                } else {
+                    // APK doesn't exist or doesn't match - create new dedup directory
+                    val newDedupDir = apkSubDir?.createDirectory(dedupDirName)
+                        ?: throw BackupFailedException(
+                            "Failed to create APK dedup directory: apk/$dedupDirName",
+                            null
+                        )
+
+                    // Copy all APKs to dedup directory
+                    for (apk in apksToBackup) {
+                        try {
+                            Timber.i("${app.packageName}: Copying $apk to dedup dir")
+                            copyRootFileToDocument(apk, newDedupDir, RootFile(apk).name)
+                        } catch (e: IOException) {
+                            Timber.e("$app: Could not backup apk $apk: $e")
+                            throw BackupFailedException("Could not backup apk $apk", e)
+                        } catch (e: Throwable) {
+                            LogsHandler.unexpectedException(e, app)
+                            throw BackupFailedException("Could not backup apk $apk", e)
+                        }
+                    }
+
+                    // Store reference to dedup directory
+                    val relativePath = ApkDeduplicationHelper.getRelativeApkPath(
+                        app.versionCode,
+                        apksToBackup
+                    )
+                    backupBuilder.setApkStorageDir(relativePath)
+                    Timber.i("<${app.packageName}> Created deduplicated APK at: $relativePath")
+                }
+            } catch (e: BackupFailedException) {
+                throw e
             } catch (e: Throwable) {
                 LogsHandler.unexpectedException(e, app)
-                throw BackupFailedException("Could not backup apk $apk", e)
+                throw BackupFailedException("APK deduplication failed", e)
             }
         }
     }

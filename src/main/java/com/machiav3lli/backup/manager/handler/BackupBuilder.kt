@@ -52,6 +52,7 @@ class BackupBuilder(
     private var cipherType: String? = null
     private val cpuArch: String = Android.mainPlatform
     private var size: Long = 0L
+    private var apkStorageDir: String? = null
     val backupDir = ensureBackupPath(backupRoot)
     val backupPropsFile = getPropsFile(backupRoot)
 
@@ -136,6 +137,10 @@ class BackupBuilder(
         this.size = size
     }
 
+    fun setApkStorageDir(path: String?) {
+        this.apkStorageDir = path
+    }
+
     @Throws(IOException::class)
     private fun saveBackupProperties(
         propertiesFile: UndeterminedStorageFile,
@@ -171,6 +176,7 @@ class BackupBuilder(
                 size = size,
                 persistent = false,
                 note = "",
+                apkStorageDir = apkStorageDir,
             )
         backup.dir = backupDir
         backup.file = saveBackupProperties(backupPropsFile, backup)

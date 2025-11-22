@@ -81,6 +81,8 @@ data class Backup @OptIn(kotlinx.serialization.ExperimentalSerializationApi::cla
     var note: String = "",
     @ColumnInfo(defaultValue = "0")
     var persistent: Boolean = false,
+    @ColumnInfo(defaultValue = "NULL")
+    var apkStorageDir: String? = null,
 ) {
     constructor(
         base: PackageInfo,
@@ -99,6 +101,7 @@ data class Backup @OptIn(kotlinx.serialization.ExperimentalSerializationApi::cla
         size: Long,
         persistent: Boolean = false,
         note: String = "",
+        apkStorageDir: String? = null,
     ) : this(
         backupVersionCode = SystemUtils.backupVersionCode,
         packageName = base.packageName,
@@ -124,6 +127,7 @@ data class Backup @OptIn(kotlinx.serialization.ExperimentalSerializationApi::cla
         size = size,
         persistent = persistent,
         note = note,
+        apkStorageDir = apkStorageDir,
     )
 
     val isCompressed: Boolean
@@ -176,6 +180,7 @@ data class Backup @OptIn(kotlinx.serialization.ExperimentalSerializationApi::cla
             ", permissions='" + permissions + '\'' +
             ", persistent=" + persistent +
             ", note='" + note + '\'' +
+            ", apkStorageDir='" + apkStorageDir + '\'' +
             '}'
 
     override fun equals(other: Any?): Boolean = when {
@@ -210,6 +215,7 @@ data class Backup @OptIn(kotlinx.serialization.ExperimentalSerializationApi::cla
                 || note != other.note
                 || file?.path != other.file?.path
                 || dir?.path != other.dir?.path
+                || apkStorageDir != other.apkStorageDir
                        -> false
 
         else           -> true
@@ -242,6 +248,7 @@ data class Backup @OptIn(kotlinx.serialization.ExperimentalSerializationApi::cla
         result = 31 * result + note.hashCode()
         result = 31 * result + file?.path.hashCode()
         result = 31 * result + dir?.path.hashCode()
+        result = 31 * result + (apkStorageDir?.hashCode() ?: 0)
         return result
     }
 
