@@ -251,6 +251,8 @@ data class Package private constructor(val packageName: String) : KoinComponent 
         
         // Clean up deduplicated APK directory if no longer referenced
         val apkStorageDir = backup.apkStorageDir
+        debugLog { "[ApkDedup] <$packageName>: DELETE_CHECK - apkStorageDir=$apkStorageDir" }
+        
         if (apkStorageDir != null) {
             try {
                 // Count references in remaining backups (excluding the one being deleted)
@@ -263,16 +265,24 @@ data class Package private constructor(val packageName: String) : KoinComponent 
                 if (referenceCount == 0) {
                     // No other backups reference this APK directory - safe to delete
                     val appBackupBaseDir = getAppBackupBaseDir(create = false)
-                    appBackupBaseDir?.findFile(apkStorageDir)?.let { apkDir ->
-                        traceBackups { "<$packageName> Cleaning up unreferenced APK directory: $apkStorageDir" }
-                        debugLog { "[ApkDedup] <$packageName>: DELETE - $apkStorageDir (refs=0)" }
-                        runOrLog { apkDir.deleteRecursive() }
+                    if (appBackupBaseDir == null) {
+                        debugLog { "[ApkDedup] <$packageName>: DELETE_SKIP - appBackupBaseDir is null" }
+                    } else {
+                        val apkDir = appBackupBaseDir.findFile(apkStorageDir)
+                        if (apkDir == null) {
+                            debugLog { "[ApkDedup] <$packageName>: DELETE_SKIP - APK dir not found: $apkStorageDir" }
+                        } else {
+                            traceBackups { "<$packageName> Cleaning up unreferenced APK directory: $apkStorageDir" }
+                            debugLog { "[ApkDedup] <$packageName>: DELETE - $apkStorageDir (refs=0)" }
+                            runOrLog { apkDir.deleteRecursive() }
+                        }
                     }
                 } else {
                     debugLog { "[ApkDedup] <$packageName>: KEEP - $apkStorageDir (refs=$referenceCount)" }
                 }
             } catch (e: Throwable) {
                 // Log error but don't fail backup deletion
+                debugLog { "[ApkDedup] <$packageName>: DELETE_ERROR - ${e.javaClass.simpleName}: ${e.message}" }
                 com.machiav3lli.backup.manager.handler.LogsHandler.logException(
                     e,
                     "<$packageName> Failed to cleanup APK directory: $apkStorageDir"
