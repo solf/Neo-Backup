@@ -268,7 +268,7 @@ data class Package private constructor(val packageName: String) : KoinComponent 
                     if (appBackupBaseDir == null) {
                         debugLog { "[ApkDedup] <$packageName>: DELETE_SKIP - appBackupBaseDir is null" }
                     } else {
-                        val apkDir = appBackupBaseDir.findFile(apkStorageDir)
+                        val apkDir = appBackupBaseDir.findFileByPath(apkStorageDir)
                         if (apkDir == null) {
                             debugLog { "[ApkDedup] <$packageName>: DELETE_SKIP - APK dir not found: $apkStorageDir" }
                         } else {

@@ -230,7 +230,7 @@ open class RestoreAppAction(context: Context, work: AppActionWork?, shell: Shell
             // APKs are in deduplicated location - resolve relative to app backup base dir
             val appBackupBaseDir = backupDir.parent?.parent 
                 ?: throw RestoreFailedException("Cannot resolve app backup base directory", null)
-            val resolvedApkDir = appBackupBaseDir.findFile(apkStorageDir)
+            val resolvedApkDir = appBackupBaseDir.findFileByPath(apkStorageDir)
                 ?: throw RestoreFailedException(
                     "Deduplicated APK directory not found: $apkStorageDir",
                     null

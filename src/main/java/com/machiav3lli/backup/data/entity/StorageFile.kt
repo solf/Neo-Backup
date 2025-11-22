@@ -654,6 +654,11 @@ open class StorageFile {
         return null
     }
 
+    /**
+     * Find a direct child file/directory by name
+     * Note: Does NOT support paths with "/" - use findFileByPath() for nested paths
+     * @see findFileByPath
+     */
     fun findFile(displayName: String): StorageFile? {
         try {
             file?.let {
@@ -672,6 +677,31 @@ open class StorageFile {
             logException(e, path, backTrace = false)
         }
         return null
+    }
+
+    /**
+     * Find file by relative path - supports nested paths with "/" separator
+     * Unlike findFile(), this method can navigate through subdirectories
+     * 
+     * Examples:
+     * - findFileByPath("subdir") - equivalent to findFile("subdir")
+     * - findFileByPath("apk/1.3.0_228_ab45035b") - finds nested directory
+     * - findFileByPath("a/b/c/file.txt") - navigates multiple levels
+     * 
+     * @param path Relative path with "/" as separator
+     * @return StorageFile if found, null if any component in path doesn't exist
+     * @see findFile for direct child lookup
+     */
+    fun findFileByPath(path: String): StorageFile? {
+        if (path.isEmpty()) return this
+        
+        var current: StorageFile? = this
+        for (component in path.split("/")) {
+            if (component.isEmpty()) continue
+            current = current?.findFile(component)
+            if (current == null) return null
+        }
+        return current
     }
 
     @Throws(FileNotFoundException::class)
