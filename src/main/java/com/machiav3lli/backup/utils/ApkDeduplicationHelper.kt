@@ -122,13 +122,13 @@ object ApkDeduplicationHelper {
     }
 
     /**
-     * Generate dedup directory name from version name, version code, and APK hash
+     * Generate dedup directory name from package name, version name, version code, and APK hash
      * Hashes first 1MB of all APK parts for reliable uniqueness
-     * Format: {sanitizedVersionName}_{versionCode}_{hashSuffix}
+     * Format: {packageName}_{sanitizedVersionName}_{versionCode}_{hashSuffix}
      */
-    fun getApkDedupDirName(versionName: String?, versionCode: Int, apkPaths: Array<String>): String {
+    fun getApkDedupDirName(packageName: String, versionName: String?, versionCode: Int, apkPaths: Array<String>): String {
         val hashSuffix = calculateApkHashSuffix(apkPaths)
-        return "${sanitizeVersionName(versionName)}_${versionCode}_${hashSuffix}"
+        return "${packageName}_${sanitizeVersionName(versionName)}_${versionCode}_${hashSuffix}"
     }
 
     /**
@@ -187,10 +187,10 @@ object ApkDeduplicationHelper {
 
     /**
      * Get relative path to APK dedup directory within app backup directory
-     * Format: apk/{sanitizedVersionName}_{versionCode}_{hashSuffix}
+     * Format: apk/{packageName}_{sanitizedVersionName}_{versionCode}_{hashSuffix}
      */
-    fun getRelativeApkPath(versionName: String?, versionCode: Int, apkPaths: Array<String>): String {
-        return "apk/${getApkDedupDirName(versionName, versionCode, apkPaths)}"
+    fun getRelativeApkPath(packageName: String, versionName: String?, versionCode: Int, apkPaths: Array<String>): String {
+        return "apk/${getApkDedupDirName(packageName, versionName, versionCode, apkPaths)}"
     }
 
     /**

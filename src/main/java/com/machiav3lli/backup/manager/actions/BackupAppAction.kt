@@ -531,6 +531,7 @@ open class BackupAppAction(context: Context, work: AppActionWork?, shell: ShellH
             try {
                 // Generate dedup directory name from APKs
                 val dedupDirName = ApkDeduplicationHelper.getApkDedupDirName(
+                    app.packageName,
                     app.versionName,
                     app.versionCode,
                     apksToBackup
@@ -545,6 +546,7 @@ open class BackupAppAction(context: Context, work: AppActionWork?, shell: ShellH
                 ) {
                     // APK already exists and matches - just store reference
                     val relativePath = ApkDeduplicationHelper.getRelativeApkPath(
+                        app.packageName,
                         app.versionName,
                         app.versionCode,
                         apksToBackup
@@ -576,6 +578,7 @@ open class BackupAppAction(context: Context, work: AppActionWork?, shell: ShellH
 
                     // Store reference to dedup directory
                     val relativePath = ApkDeduplicationHelper.getRelativeApkPath(
+                        app.packageName,
                         app.versionName,
                         app.versionCode,
                         apksToBackup

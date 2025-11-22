@@ -228,13 +228,26 @@ open class RestoreAppAction(context: Context, work: AppActionWork?, shell: Shell
         val apkStorageDir = backup.apkStorageDir
         val apkDir = if (apkStorageDir != null) {
             // APKs are in deduplicated location - resolve relative to app backup base dir
-            val appBackupBaseDir = backupDir.parent?.parent 
+            val appBackupBaseDir = backupDir.parent 
                 ?: throw RestoreFailedException("Cannot resolve app backup base directory", null)
-            val resolvedApkDir = appBackupBaseDir.findFileByPath(apkStorageDir)
-                ?: throw RestoreFailedException(
-                    "Deduplicated APK directory not found: $apkStorageDir",
-                    null
-                )
+            
+            debugLog { "[ApkDedup] <$packageName>: RESTORE_PATH - appBackupBaseDir=${appBackupBaseDir.path}, looking for $apkStorageDir" }
+            
+            var resolvedApkDir = appBackupBaseDir.findFileByPath(apkStorageDir)
+            if (resolvedApkDir == null) {
+                debugLog { "[ApkDedup] <$packageName>: RESTORE_NOTFOUND - first attempt failed, invalidating cache and retrying" }
+                StorageFile.invalidateCache(appBackupBaseDir)
+                resolvedApkDir = appBackupBaseDir.findFileByPath(apkStorageDir)
+                if (resolvedApkDir == null) {
+                    debugLog { "[ApkDedup] <$packageName>: RESTORE_SKIP - still not found after cache invalidation: $apkStorageDir" }
+                    throw RestoreFailedException(
+                        "Deduplicated APK directory not found: $apkStorageDir",
+                        null
+                    )
+                } else {
+                    debugLog { "[ApkDedup] <$packageName>: RESTORE_FOUND - found after cache invalidation" }
+                }
+            }
             Timber.i("<$packageName> Using deduplicated APKs from: $apkStorageDir")
             debugLog { "[ApkDedup] <$packageName>: RESTORE - $apkStorageDir" }
             resolvedApkDir
