@@ -198,8 +198,11 @@ open class BackupAppAction(context: Context, work: AppActionWork?, shell: ShellH
                         backupBuilder.setCipherType(SymmetricKeyAlgorithm.AES_256.name)
                 }
                 StorageFile.invalidateCache(backupInstanceDir)
-                val backupSize = backupInstanceDir.listFiles().sumOf { it.size }
+                val dataSize = backupInstanceDir.listFiles().sumOf { it.size }
+                val copiedApkSize = backupBuilder.getCopiedApkSize()
+                val backupSize = dataSize + copiedApkSize
                 backupBuilder.setSize(backupSize)
+                debugLog { "[BackupSize] <${app.packageName}>: data=${dataSize / 1024}KB, copiedApk=${copiedApkSize / 1024}KB, total=${backupSize / 1024}KB" }
 
                 backup = backupBuilder.createBackup()
 
@@ -575,6 +578,11 @@ open class BackupAppAction(context: Context, work: AppActionWork?, shell: ShellH
                             throw BackupFailedException("Could not backup apk $apk", e)
                         }
                     }
+
+                    // Calculate size of newly copied APKs
+                    val copiedApkSize = newDedupDir.listFiles().sumOf { it.size }
+                    backupBuilder.setCopiedApkSize(copiedApkSize)
+                    debugLog { "[ApkDedup] <${app.packageName}>: COPY - $dedupDirName, size=${copiedApkSize / 1024}KB" }
 
                     // Store reference to dedup directory
                     val relativePath = ApkDeduplicationHelper.getRelativeApkPath(

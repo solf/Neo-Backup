@@ -52,6 +52,7 @@ class BackupBuilder(
     private var cipherType: String? = null
     private val cpuArch: String = Android.mainPlatform
     private var size: Long = 0L
+    private var copiedApkSize: Long = 0L
     private var apkStorageDir: String? = null
     val backupDir = ensureBackupPath(backupRoot)
     val backupPropsFile = getPropsFile(backupRoot)
@@ -135,6 +136,14 @@ class BackupBuilder(
 
     fun setSize(size: Long) {
         this.size = size
+    }
+
+    fun setCopiedApkSize(copiedApkSize: Long) {
+        this.copiedApkSize = copiedApkSize
+    }
+
+    fun getCopiedApkSize(): Long {
+        return copiedApkSize
     }
 
     fun setApkStorageDir(path: String?) {
