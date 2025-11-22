@@ -654,6 +654,13 @@ val pref_allowDowngrade = BooleanPref(
     defaultValue = false
 )
 
+val pref_changeDetectionScanDepth = IntPref(
+    key = "adv.changeDetectionScanDepth",
+    summary = "Maximum directory depth for change detection scanning (higher = more accurate but slower)",
+    entries = (1..10).toList(),
+    defaultValue = 3
+)
+
 
 //---------------------------------------- values that should persist for internal purposes (no UI)
 

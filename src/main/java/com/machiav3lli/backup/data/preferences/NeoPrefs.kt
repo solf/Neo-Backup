@@ -232,6 +232,19 @@ class NeoPrefs private constructor(val context: Context) : KoinComponent {
         defaultValue = emptySet(),
     )
 
+    val changeDetectionHotPaths = PrefString(
+        dataStore = dataStore,
+        key = PrefKey.CHANGE_DETECTION_HOT_PATHS,
+        defaultValue = "{}",
+    )
+
+    val changeDetectionScanDepth = PrefInt(
+        dataStore = dataStore,
+        key = PrefKey.CHANGE_DETECTION_SCAN_DEPTH,
+        defaultValue = 3,
+        entries = (1..10).toList(),
+    )
+
     fun homeSortFilterFlow(): Flow<SortFilterModel> = combine(
         sortHome.flow(),
         sortAscHome.flow(),

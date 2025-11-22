@@ -42,6 +42,7 @@ import com.machiav3lli.backup.data.dbs.entity.Backup
 import com.machiav3lli.backup.data.dbs.repository.PackageRepository
 import com.machiav3lli.backup.data.entity.StorageFile
 import com.machiav3lli.backup.data.plugins.Plugin
+import com.machiav3lli.backup.data.preferences.NeoPrefs
 import com.machiav3lli.backup.data.preferences.NeoPrefs.Companion.prefsModule
 import com.machiav3lli.backup.data.preferences.pref_catchUncaughtException
 import com.machiav3lli.backup.data.preferences.pref_logToSystemLogcat
@@ -86,6 +87,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.StringFormat
 import kotlinx.serialization.decodeFromString
@@ -103,6 +105,7 @@ import org.koin.dsl.module
 import org.koin.java.KoinJavaComponent.get
 import timber.log.Timber
 import java.lang.ref.WeakReference
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.system.exitProcess
@@ -552,6 +555,9 @@ class NeoApp : Application(), KoinStartup {
         private var theWakeLock: PowerManager.WakeLock? = null
         private var wakeLockNested = AtomicInteger(0)
         private const val WAKELOCK_TAG = "NeoBackup:Application"
+        
+        // Hot-paths cache for change detection (loaded on wakelock acquire, saved on release)
+        private var hotPathsCache = ConcurrentHashMap<String, String>()
 
         // count the nesting levels
         // might be difficult sometimes, because
@@ -568,6 +574,24 @@ class NeoApp : Application(), KoinStartup {
                         val pm: PowerManager = get(PowerManager::class.java)
                         theWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKELOCK_TAG)
                         theWakeLock?.acquire(60 * 60 * 1000L)
+                        
+                        // Load hot-paths cache from preferences
+                        try {
+                            val prefs = get<NeoPrefs>(NeoPrefs::class.java)
+                            val hotPathsJson = prefs.changeDetectionHotPaths.value
+                            val loadedMap = try {
+                                Json.decodeFromString<Map<String, String>>(hotPathsJson)
+                            } catch (e: Exception) {
+                                emptyMap()
+                            }
+                            hotPathsCache.clear()
+                            hotPathsCache.putAll(loadedMap)
+                            debugLog { "[ChangeDetect] Hot-paths cache loaded: ${hotPathsCache.size} entries" }
+                            traceDebug { "[ChangeDetect] Hot-paths cache loaded: ${hotPathsCache.size} entries" }
+                        } catch (e: Exception) {
+                            Timber.e(e, "[ChangeDetect] Failed to load hot-paths cache")
+                            debugLog { "[ChangeDetect] Failed to load hot-paths cache: ${e.message}" }
+                        }
                     }
                     
                     traceDebug { "%%%%% $WAKELOCK_TAG acquire: $before→$after ${if (actuallyAcquired) "ACQUIRED" else "ref-count"}" }
@@ -591,12 +615,47 @@ class NeoApp : Application(), KoinStartup {
                     val actuallyReleased = (after == 0)
                     
                     if (actuallyReleased) {
+                        // Save hot-paths cache to preferences
+                        kotlinx.coroutines.runBlocking {
+                            saveHotPathsCache()
+                        }
+                        
                         theWakeLock?.release()
                     }
                     
                     traceDebug { "%%%%% $WAKELOCK_TAG release: $before→$after ${if (actuallyReleased) "RELEASED" else "ref-count"}" }
                     debugLog { "[WAKELOCK] release: $before→$after ${if (actuallyReleased) "RELEASED" else "ref-count"} | ${getCompactStackTrace()}" }
                 }
+            }
+        }
+        
+        // Helper functions for hot-paths cache
+        fun getHotPath(key: String): String? = hotPathsCache[key]
+        
+        fun getHotPathKeys(): Set<String> = hotPathsCache.keys.toSet()
+        
+        fun updateHotPath(key: String, value: String) {
+            hotPathsCache[key] = value
+            if (wakeLockNested.get() == 0) {
+                Timber.w("[ChangeDetect] Hot-path updated OUTSIDE wakelock: key=$key")
+                debugLog { "[ChangeDetect] Hot-path updated OUTSIDE wakelock: key=$key" }
+            }
+        }
+        
+        fun removeHotPath(key: String) {
+            hotPathsCache.remove(key)
+        }
+        
+        suspend fun saveHotPathsCache() {
+            try {
+                val prefs = get<NeoPrefs>(NeoPrefs::class.java)
+                val hotPathsJson = Json.encodeToString(hotPathsCache.toMap())
+                prefs.changeDetectionHotPaths.set(hotPathsJson)
+                debugLog { "[ChangeDetect] Hot-paths cache saved: ${hotPathsCache.size} entries" }
+                traceDebug { "[ChangeDetect] Hot-paths cache saved: ${hotPathsCache.size} entries" }
+            } catch (e: Exception) {
+                Timber.e(e, "[ChangeDetect] Failed to save hot-paths cache")
+                debugLog { "[ChangeDetect] Failed to save hot-paths cache: ${e.message}" }
             }
         }
 

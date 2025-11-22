@@ -2,6 +2,7 @@ package com.machiav3lli.backup.data.preferences
 
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 
 object PrefKey {
@@ -38,4 +39,7 @@ object PrefKey {
     val LATEST_FILTER_RESTORE = intPreferencesKey("latest_filter_restore")
     val ENABLED_FILTER_RESTORE = intPreferencesKey("enabled_filter_restore")
     val TAGS_FILTER_RESTORE = stringSetPreferencesKey("tags_filter_restore")
+    // Change Detection
+    val CHANGE_DETECTION_HOT_PATHS = stringPreferencesKey("change_detection_hot_paths")
+    val CHANGE_DETECTION_SCAN_DEPTH = intPreferencesKey("change_detection_scan_depth")
 }

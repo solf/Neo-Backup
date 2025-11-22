@@ -32,16 +32,23 @@ import com.machiav3lli.backup.manager.handler.getPackageStorageStats
 import com.machiav3lli.backup.ui.pages.pref_flatStructure
 import com.machiav3lli.backup.ui.pages.pref_ignoreLockedInHousekeeping
 import com.machiav3lli.backup.ui.pages.pref_paranoidBackupLists
+import com.machiav3lli.backup.data.preferences.NeoPrefs
+import com.machiav3lli.backup.manager.handler.debugLog
+import com.machiav3lli.backup.utils.ChangeDetectionUtils
 import com.machiav3lli.backup.utils.FileUtils
 import com.machiav3lli.backup.utils.StorageLocationNotConfiguredException
 import com.machiav3lli.backup.utils.SystemUtils
 import com.machiav3lli.backup.utils.SystemUtils.getAndroidFolder
 import com.machiav3lli.backup.utils.TraceUtils
+import kotlinx.coroutines.runBlocking
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
 import timber.log.Timber
 import java.io.File
 
 // TODO consider separating package & backupsList to allow granular compose updates
-data class Package private constructor(val packageName: String) {
+data class Package private constructor(val packageName: String) : KoinComponent {
+    private val neoPrefs: NeoPrefs by inject()
     lateinit var packageInfo: com.machiav3lli.backup.data.dbs.entity.PackageInfo
     var storageStats: StorageStats? = null
         private set
@@ -415,34 +422,34 @@ data class Package private constructor(val packageName: String) {
             val lastBackupTimeMillis = lastBackup.backupDate.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
             
             // Check version code first (quick check - catches both upgrades and downgrades)
-            if (lastBackup.versionCode != versionCode) return true
+            if (lastBackup.versionCode != versionCode) {
+                debugLog { "[ChangeDetect] $packageName: version changed (${lastBackup.versionCode} -> $versionCode)" }
+                Timber.d("[ChangeDetect] $packageName: version changed (${lastBackup.versionCode} -> $versionCode)")
+                return true
+            }
+            
+            // Get preferences for deep scanning
+            val scanDepth = try { neoPrefs.changeDetectionScanDepth.value } catch (e: Exception) { 3 }
             
             // Check data directories if they exist
             try {
+                val dirsToCheck = mutableListOf<Pair<String, String>>() // path, type
+                
                 val dataDirPath = dataPath
                 if (dataDirPath.isNotEmpty()) {
-                    val dataDir = RootFile(dataDirPath)
-                    if (dataDir.exists() && dataDir.lastModified() > lastBackupTimeMillis) {
-                        return true
-                    }
+                    dirsToCheck.add(Pair(dataDirPath, "data"))
                 }
                 
                 val deDirPath = devicesProtectedDataPath
                 if (deDirPath.isNotEmpty()) {
-                    val deDir = RootFile(deDirPath)
-                    if (deDir.exists() && deDir.lastModified() > lastBackupTimeMillis) {
-                        return true
-                    }
+                    dirsToCheck.add(Pair(deDirPath, "dedata"))
                 }
                 
                 // Check external data if backup included it
                 if (lastBackup.hasExternalData) {
                     val extPath = getExternalDataPath()
                     if (extPath.isNotEmpty()) {
-                        val extDir = RootFile(extPath)
-                        if (extDir.exists() && extDir.lastModified() > lastBackupTimeMillis) {
-                            return true
-                        }
+                        dirsToCheck.add(Pair(extPath, "external"))
                     }
                 }
                 
@@ -450,10 +457,7 @@ data class Package private constructor(val packageName: String) {
                 if (lastBackup.hasObbData) {
                     val obbPath = getObbFilesPath()
                     if (obbPath.isNotEmpty()) {
-                        val obbDir = RootFile(obbPath)
-                        if (obbDir.exists() && obbDir.lastModified() > lastBackupTimeMillis) {
-                            return true
-                        }
+                        dirsToCheck.add(Pair(obbPath, "obb"))
                     }
                 }
                 
@@ -461,18 +465,89 @@ data class Package private constructor(val packageName: String) {
                 if (lastBackup.hasMediaData) {
                     val mediaPath = getMediaFilesPath()
                     if (mediaPath.isNotEmpty()) {
-                        val mediaDir = RootFile(mediaPath)
-                        if (mediaDir.exists() && mediaDir.lastModified() > lastBackupTimeMillis) {
-                            return true
+                        dirsToCheck.add(Pair(mediaPath, "media"))
+                    }
+                }
+                
+                // Get last changed type for prioritization
+                val lastChangedType = NeoApp.getHotPath("$packageName:lastChangedType")
+                
+                // PHASE 1: Quick check - scan all hot-paths (starting with last-changed type)
+                // Reorder to check last-changed type first
+                val prioritizedDirs = if (lastChangedType != null) {
+                    val lastChangedEntry = dirsToCheck.find { it.second == lastChangedType }
+                    if (lastChangedEntry != null) {
+                        listOf(lastChangedEntry) + dirsToCheck.filter { it.second != lastChangedType }
+                    } else {
+                        dirsToCheck
+                    }
+                } else {
+                    dirsToCheck
+                }
+                
+                for ((dirPath, dirType) in prioritizedDirs) {
+                    val dir = RootFile(dirPath)
+                    if (!dir.exists()) continue
+                    
+                    val hotPath = NeoApp.getHotPath("$packageName:$dirType")
+                    if (hotPath != null) {
+                        // Phase 1: Check only the hot-path (depth 0, just the specific path)
+                        val hotFile = RootFile(dir, hotPath)
+                        if (hotFile.exists()) {
+                            val hotTimestamp = hotFile.lastModified()
+                            if (hotTimestamp > lastBackupTimeMillis) {
+                                debugLog { "[ChangeDetect] $packageName: changes detected in $dirType at $hotPath (timestamp=$hotTimestamp >= $lastBackupTimeMillis) (hot-path ✓ PHASE-1)" }
+                                Timber.d("[ChangeDetect] $packageName: changes detected in $dirType at $hotPath (timestamp=$hotTimestamp >= $lastBackupTimeMillis) (hot-path ✓ PHASE-1)")
+                                
+                                // Update last changed type
+                                NeoApp.updateHotPath("$packageName:lastChangedType", dirType)
+                                
+                                return true
+                            }
                         }
                     }
                 }
+                
+                debugLog { "[ChangeDetect] $packageName: PHASE-1 complete (hot-paths), no changes found, proceeding to PHASE-2 (full scan)" }
+                Timber.d("[ChangeDetect] $packageName: PHASE-1 complete (hot-paths), no changes found, proceeding to PHASE-2 (full scan)")
+                
+                // PHASE 2: Full BFS scan (only if Phase 1 found nothing)
+                for ((dirPath, dirType) in prioritizedDirs) {
+                    val dir = RootFile(dirPath)
+                    if (!dir.exists()) continue
+                    
+                    val hotPath = NeoApp.getHotPath("$packageName:$dirType")
+                    val result = ChangeDetectionUtils.scanForChanges(
+                        rootDir = dir,
+                        thresholdTimestamp = lastBackupTimeMillis,
+                        maxDepth = scanDepth,
+                        hotPath = hotPath
+                    )
+                    
+                    if (result.hasChanges) {
+                        debugLog { "[ChangeDetect] $packageName: changes detected in $dirType at ${result.foundPath} (timestamp=${result.foundTimestamp} >= $lastBackupTimeMillis) (PHASE-2 full-scan)" }
+                        Timber.d("[ChangeDetect] $packageName: changes detected in $dirType at ${result.foundPath} (timestamp=${result.foundTimestamp} >= $lastBackupTimeMillis) (PHASE-2 full-scan)")
+                        
+                        // Update hot path and last changed type
+                        result.foundPath?.let { foundPath ->
+                            NeoApp.updateHotPath("$packageName:$dirType", foundPath)
+                            NeoApp.updateHotPath("$packageName:lastChangedType", dirType)
+                        }
+                        
+                        return true
+                    }
+                }
+                
+                debugLog { "[ChangeDetect] $packageName: no changes since ${lastBackup.backupDate} (scanned depth=$scanDepth, 2-phase complete)" }
+                Timber.d("[ChangeDetect] $packageName: no changes since ${lastBackup.backupDate} (scanned depth=$scanDepth, 2-phase complete)")
+                return false
+                
             } catch (e: Exception) {
                 // If we can't check, treat as changed to be safe
+                debugLog { "[ChangeDetect] $packageName: error checking data, treating as changed: ${e.message}" }
+                Timber.d("[ChangeDetect] $packageName: error checking data, treating as changed: ${e.message}")
                 return true
             }
-            
-            return false
         }
 
     val isModifiedOrNew: Boolean
