@@ -22,6 +22,8 @@ import com.machiav3lli.backup.data.entity.StorageFile
 import com.topjohnwu.superuser.io.SuFile
 import timber.log.Timber
 import java.io.File
+import java.io.FileInputStream
+import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
@@ -29,6 +31,9 @@ import kotlin.concurrent.withLock
 object ApkDeduplicationHelper {
     // Per-package locks for APK operations to ensure atomicity
     private val packageLocks = ConcurrentHashMap<String, ReentrantLock>()
+    
+    // Size to read for hash calculation (1 MB)
+    private const val HASH_READ_SIZE = 1024 * 1024
 
     /**
      * Get or create lock for specific package
@@ -47,32 +52,68 @@ object ApkDeduplicationHelper {
     }
 
     /**
-     * Generate dedup directory name from version code and APK sizes
-     * Uses metadata (size, count) instead of hashing for speed
-     * Format: {versionCode}_{count}_{totalSize}
-     * 
-     * This is reliable for APKs because:
-     * - APKs are compressed ZIP archives
-     * - Even tiny content changes alter compressed size
-     * - Collision probability is astronomically low
+     * Calculate short hash suffix from all APK files
+     * Hashes first 1MB of each APK part (or entire file if smaller) plus file size
+     * Returns last 8 characters of SHA-256 hash
      */
-    fun getApkDedupDirName(versionCode: Int, apkPaths: Array<String>): String {
-        val totalSize = apkPaths.sumOf { path ->
-            try {
-                val file = File(path)
-                if (file.exists()) {
+    private fun calculateApkHashSuffix(apkPaths: Array<String>): String {
+        try {
+            val digest = MessageDigest.getInstance("SHA-256")
+            
+            // Hash each APK part in order
+            for (apkPath in apkPaths) {
+                val file = File(apkPath)
+                val fileSize = if (file.exists()) {
                     file.length()
                 } else {
                     // Try with SuFile for root access
-                    SuFile(path).length()
+                    val suFile = SuFile(apkPath)
+                    if (!suFile.exists()) {
+                        Timber.w("APK file does not exist: $apkPath")
+                        continue
+                    }
+                    suFile.length()
                 }
-            } catch (e: Exception) {
-                Timber.w(e, "Failed to get size for: $path")
-                0L
+                
+                // Include file size in hash to detect truncated files
+                digest.update(fileSize.toString().toByteArray())
+
+                // Read first 1MB or entire file, whichever is smaller
+                val bytesToRead = minOf(HASH_READ_SIZE.toLong(), fileSize).toInt()
+                val buffer = ByteArray(8192)
+                var totalRead = 0
+
+                FileInputStream(file).use { fis ->
+                    while (totalRead < bytesToRead) {
+                        val toRead = minOf(buffer.size, bytesToRead - totalRead)
+                        val bytesRead = fis.read(buffer, 0, toRead)
+                        if (bytesRead <= 0) break
+                        digest.update(buffer, 0, bytesRead)
+                        totalRead += bytesRead
+                    }
+                }
             }
+
+            val hashBytes = digest.digest()
+            val hashHex = hashBytes.joinToString("") { "%02x".format(it) }
+            
+            // Return last 8 characters for reasonable uniqueness
+            return hashHex.takeLast(8)
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to calculate APK hash for: ${apkPaths.joinToString()}")
+            // Return a fallback hash based on paths
+            return apkPaths.joinToString("").hashCode().toString(16).takeLast(8).padStart(8, '0')
         }
-        val count = apkPaths.size
-        return "${versionCode}_${count}_${totalSize}"
+    }
+
+    /**
+     * Generate dedup directory name from version code and APK hash
+     * Hashes first 1MB of all APK parts for reliable uniqueness
+     * Format: {versionCode}_{hashSuffix}
+     */
+    fun getApkDedupDirName(versionCode: Int, apkPaths: Array<String>): String {
+        val hashSuffix = calculateApkHashSuffix(apkPaths)
+        return "${versionCode}_${hashSuffix}"
     }
 
     /**
@@ -130,7 +171,7 @@ object ApkDeduplicationHelper {
 
     /**
      * Get relative path to APK dedup directory within app backup directory
-     * Format: apk/{versionCode}_{count}_{totalSize}
+     * Format: apk/{versionCode}_{hashSuffix}
      */
     fun getRelativeApkPath(versionCode: Int, apkPaths: Array<String>): String {
         return "apk/${getApkDedupDirName(versionCode, apkPaths)}"

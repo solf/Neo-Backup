@@ -528,7 +528,7 @@ open class BackupAppAction(context: Context, work: AppActionWork?, shell: ShellH
         // Implement deduplication with per-package locking
         ApkDeduplicationHelper.withPackageApkLock(app.packageName) {
             try {
-                // Generate dedup directory name from APK metadata (fast - no file reading)
+                // Generate dedup directory name from APKs
                 val dedupDirName = ApkDeduplicationHelper.getApkDedupDirName(
                     app.versionCode,
                     apksToBackup
