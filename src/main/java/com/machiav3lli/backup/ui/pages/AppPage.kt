@@ -499,6 +499,18 @@ fun AppPage(
                         )
                     }
                 }
+                // Display total APK size if APKs exist
+                if (pkg.totalApkSize > 0) item(span = { GridItemSpan(columns) }) {
+                    Text(
+                        text = stringResource(
+                            id = R.string.stats_apk_size,
+                            android.text.format.Formatter.formatFileSize(context, pkg.totalApkSize)
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
                 this.items(
                     items = pkg.backupsNewestFirst,
                     span = { GridItemSpan(columns) }) {

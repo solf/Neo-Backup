@@ -408,6 +408,45 @@ data class Package private constructor(val packageName: String) : KoinComponent 
     val hasBackups: Boolean
         get() = backupList.isNotEmpty()
 
+    /**
+     * Calculate the total size of all deduplicated APKs for this package.
+     * Returns the size of the 'apk/' subdirectory under appBackupBaseDir.
+     */
+    val totalApkSize: Long
+        get() {
+            return try {
+                val appBackupBaseDir = getAppBackupBaseDir(create = false)
+                val apkSubDir = appBackupBaseDir?.findFile("apk")
+                if (apkSubDir != null && apkSubDir.exists() && apkSubDir.isDirectory) {
+                    calculateDirectorySize(apkSubDir)
+                } else {
+                    0L
+                }
+            } catch (e: Exception) {
+                val appBackupBaseDir = try { getAppBackupBaseDir(create = false) } catch (_: Exception) { null }
+                debugLog { "[ApkSize] <$packageName>: FAILED to calculate APK size - appBackupBaseDir=${appBackupBaseDir?.path}, exception=${e.javaClass.simpleName}: ${e.message}" }
+                Timber.w("Failed to calculate APK size for $packageName: $e")
+                0L
+            }
+        }
+
+    private fun calculateDirectorySize(directory: StorageFile): Long {
+        var totalSize = 0L
+        try {
+            directory.listFiles().forEach { file ->
+                totalSize += if (file.isDirectory) {
+                    calculateDirectorySize(file)
+                } else {
+                    file.size
+                }
+            }
+        } catch (e: Exception) {
+            debugLog { "[ApkSize] Error calculating directory size for ${directory.path}: ${e.javaClass.simpleName}: ${e.message}" }
+            Timber.w("Error calculating directory size: $e")
+        }
+        return totalSize
+    }
+
     val apkPath: String
         get() = if (isApp) (packageInfo as AppInfo).apkDir ?: "" else ""
 
