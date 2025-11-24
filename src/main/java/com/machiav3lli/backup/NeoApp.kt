@@ -558,6 +558,8 @@ class NeoApp : Application(), KoinStartup {
         
         // Hot-paths cache for change detection (loaded on wakelock acquire, saved on release)
         private var hotPathsCache = ConcurrentHashMap<String, String>()
+        
+        const val DETAILED_CHANGE_DETECT_LOG = true
 
         // count the nesting levels
         // might be difficult sometimes, because
@@ -586,6 +588,7 @@ class NeoApp : Application(), KoinStartup {
                             }
                             hotPathsCache.clear()
                             hotPathsCache.putAll(loadedMap)
+                            if (DETAILED_CHANGE_DETECT_LOG) debugLog { "[ChangeDetect] Hot-paths loaded: $hotPathsJson" }
                             debugLog { "[ChangeDetect] Hot-paths cache loaded: ${hotPathsCache.size} entries" }
                             traceDebug { "[ChangeDetect] Hot-paths cache loaded: ${hotPathsCache.size} entries" }
                         } catch (e: Exception) {
@@ -651,6 +654,7 @@ class NeoApp : Application(), KoinStartup {
                 val prefs = get<NeoPrefs>(NeoPrefs::class.java)
                 val hotPathsJson = Json.encodeToString(hotPathsCache.toMap())
                 prefs.changeDetectionHotPaths.set(hotPathsJson)
+                if (DETAILED_CHANGE_DETECT_LOG) debugLog { "[ChangeDetect] Hot-paths saving: $hotPathsJson" }
                 debugLog { "[ChangeDetect] Hot-paths cache saved: ${hotPathsCache.size} entries" }
                 traceDebug { "[ChangeDetect] Hot-paths cache saved: ${hotPathsCache.size} entries" }
             } catch (e: Exception) {
