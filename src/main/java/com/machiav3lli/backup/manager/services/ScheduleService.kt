@@ -106,7 +106,6 @@ open class ScheduleService : Service() {
                 ACTION_CANCEL       -> {
                     traceSchedule { "[$scheduleId] name='$scheduleName' action=$action" }
                     ScheduleWork.cancel(scheduleId)
-                    NeoApp.wakelock(false)
                     traceSchedule { "%%%%% service stop" }
                     stopSelf()
                 }
@@ -151,27 +150,16 @@ open class ScheduleService : Service() {
                     "[$scheduleId] '$scheduleName' $workType work already queued/running in WorkManager (states: $workStates), skipping duplicate enqueue" 
                 }
                 Timber.i("[$scheduleId] Duplicate schedule prevented by ScheduleService WorkManager check: $workType work in states [$workStates]")
-                
-                // Still schedule next alarm for future runs
-                scheduleAlarmsOnce(this)
-                
-                // Shutdown service after brief delay
-                CoroutineScope(Dispatchers.IO).launch {
-                    delay(1000)  // Brief delay
-                    stopSelf()
+            } else {
+                // Safe to enqueue - no existing work found
+                val repeatCount = 1 + pref_fakeScheduleDups.value
+                repeat(repeatCount) { count ->
+                    CoroutineScope(Dispatchers.IO).launch {
+                        scheduleNextAlarm(this@ScheduleService, scheduleId, true)
+                    }
+                    ScheduleWork.enqueueScheduled(scheduleId, scheduleName)
+                    traceSchedule { "[$scheduleId] starting task for schedule${if (count > 0) " (dup $count)" else ""}" }
                 }
-                NeoApp.wakelock(false)
-                return START_NOT_STICKY
-            }
-            
-            // Safe to enqueue - no existing work found
-            val repeatCount = 1 + pref_fakeScheduleDups.value
-            repeat(repeatCount) { count ->
-                CoroutineScope(Dispatchers.IO).launch {
-                    scheduleNextAlarm(this@ScheduleService, scheduleId, true)
-                }
-                ScheduleWork.enqueueScheduled(scheduleId, scheduleName)
-                traceSchedule { "[$scheduleId] starting task for schedule${if (count > 0) " (dup $count)" else ""}" }
             }
         }
 
