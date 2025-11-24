@@ -38,7 +38,6 @@ import com.machiav3lli.backup.data.plugins.InternalShellScriptPlugin
 import com.machiav3lli.backup.manager.handler.PGPHandler
 import com.machiav3lli.backup.manager.handler.ShellCommands
 import com.machiav3lli.backup.manager.handler.ShellHandler
-import com.machiav3lli.backup.manager.handler.debugLog
 import com.machiav3lli.backup.manager.handler.ShellHandler.Companion.hasPmBypassLowTargetSDKBlock
 import com.machiav3lli.backup.manager.handler.ShellHandler.Companion.quote
 import com.machiav3lli.backup.manager.handler.ShellHandler.Companion.quoteMultiple
@@ -231,31 +230,23 @@ open class RestoreAppAction(context: Context, work: AppActionWork?, shell: Shell
             val appBackupBaseDir = backupDir.parent 
                 ?: throw RestoreFailedException("Cannot resolve app backup base directory", null)
             
-            debugLog { "[ApkDedup] <$packageName>: RESTORE_PATH - appBackupBaseDir=${appBackupBaseDir.path}, looking for $apkStorageDir" }
-            
             var resolvedApkDir = appBackupBaseDir.findFileByPath(apkStorageDir)
             if (resolvedApkDir == null) {
                 // 2025-11-22 solf: I have no idea if this is necessary, but had cache issues in deletion, so add fallback here too
-                debugLog { "[ApkDedup] <$packageName>: RESTORE_NOTFOUND - first attempt failed, invalidating cache and retrying" }
                 StorageFile.invalidateCache(appBackupBaseDir)
                 resolvedApkDir = appBackupBaseDir.findFileByPath(apkStorageDir)
                 if (resolvedApkDir == null) {
-                    debugLog { "[ApkDedup] <$packageName>: RESTORE_SKIP - still not found after cache invalidation: $apkStorageDir" }
                     throw RestoreFailedException(
                         "Deduplicated APK directory not found: $apkStorageDir",
                         null
                     )
-                } else {
-                    debugLog { "[ApkDedup] <$packageName>: RESTORE_FOUND - found after cache invalidation" }
                 }
             }
             Timber.i("<$packageName> Using deduplicated APKs from: $apkStorageDir")
-            debugLog { "[ApkDedup] <$packageName>: RESTORE - $apkStorageDir" }
             resolvedApkDir
         } else {
             // Old backup format - APKs are in backup instance directory
             Timber.d("<$packageName> Using APKs from backup instance directory (legacy format)")
-            debugLog { "[ApkDedup] <$packageName>: RESTORE - legacy (no dedup)" }
             backupDir
         }
 

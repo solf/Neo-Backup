@@ -69,12 +69,3 @@ class DebugLogHandler {
         }
     }
 }
-
-inline fun debugLog(lazyMessage: () -> String) {
-    if (pref_debugLog.value) {
-        DebugLogHandler.writeDebug(lazyMessage())
-    }
-}
-
-fun getCompactStackTrace(): String = Thread.currentThread().stackTrace
-    .drop(2).take(10).joinToString(" | ")

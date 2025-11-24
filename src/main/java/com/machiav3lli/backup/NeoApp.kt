@@ -58,8 +58,6 @@ import com.machiav3lli.backup.manager.handler.LogsHandler
 import com.machiav3lli.backup.manager.handler.PGPHandler
 import com.machiav3lli.backup.manager.handler.ShellHandler
 import com.machiav3lli.backup.manager.handler.WorkHandler
-import com.machiav3lli.backup.manager.handler.debugLog
-import com.machiav3lli.backup.manager.handler.getCompactStackTrace
 import com.machiav3lli.backup.manager.services.PackageUnInstalledReceiver
 import com.machiav3lli.backup.ui.activities.NeoActivity
 import com.machiav3lli.backup.ui.activities.viewModelsModule
@@ -588,26 +586,20 @@ class NeoApp : Application(), KoinStartup {
                             }
                             hotPathsCache.clear()
                             hotPathsCache.putAll(loadedMap)
-                            if (DETAILED_CHANGE_DETECT_LOG) debugLog { "[ChangeDetect] Hot-paths loaded: $hotPathsJson" }
-                            debugLog { "[ChangeDetect] Hot-paths cache loaded: ${hotPathsCache.size} entries" }
                             traceDebug { "[ChangeDetect] Hot-paths cache loaded: ${hotPathsCache.size} entries" }
                         } catch (e: Exception) {
                             Timber.e(e, "[ChangeDetect] Failed to load hot-paths cache")
-                            debugLog { "[ChangeDetect] Failed to load hot-paths cache: ${e.message}" }
                         }
                     }
                     
                     traceDebug { "%%%%% $WAKELOCK_TAG acquire: $before→$after ${if (actuallyAcquired) "ACQUIRED" else "ref-count"}" }
-                    debugLog { "[WAKELOCK] acquire: $before→$after ${if (actuallyAcquired) "ACQUIRED" else "ref-count"} | ${getCompactStackTrace()}" }
                 } else {
                     val after = wakeLockNested.accumulateAndGet(-1, Int::plus)
                     val before = after + 1
                     
                     // ERROR DETECTION: Check for negative counter
                     if (after < 0) {
-                        val stackTrace = getCompactStackTrace()
-                        traceDebug { "***ERROR*** $WAKELOCK_TAG counter went NEGATIVE: $before→$after | $stackTrace" }
-                        debugLog { "***ERROR*** [WAKELOCK] NEGATIVE COUNTER: $before→$after (BUG: unbalanced release) | $stackTrace" }
+                        traceDebug { "***ERROR*** $WAKELOCK_TAG counter went NEGATIVE: $before→$after" }
                         Timber.e("WAKELOCK ERROR: Counter went negative $before→$after, clamping to 0")
                         
                         // RECOVERY: Clamp to zero
@@ -627,7 +619,6 @@ class NeoApp : Application(), KoinStartup {
                     }
                     
                     traceDebug { "%%%%% $WAKELOCK_TAG release: $before→$after ${if (actuallyReleased) "RELEASED" else "ref-count"}" }
-                    debugLog { "[WAKELOCK] release: $before→$after ${if (actuallyReleased) "RELEASED" else "ref-count"} | ${getCompactStackTrace()}" }
                 }
             }
         }
@@ -641,7 +632,6 @@ class NeoApp : Application(), KoinStartup {
             hotPathsCache[key] = value
             if (wakeLockNested.get() == 0) {
                 Timber.w("[ChangeDetect] Hot-path updated OUTSIDE wakelock: key=$key")
-                debugLog { "[ChangeDetect] Hot-path updated OUTSIDE wakelock: key=$key" }
             }
         }
         
@@ -654,12 +644,9 @@ class NeoApp : Application(), KoinStartup {
                 val prefs = get<NeoPrefs>(NeoPrefs::class.java)
                 val hotPathsJson = Json.encodeToString(hotPathsCache.toMap())
                 prefs.changeDetectionHotPaths.set(hotPathsJson)
-                if (DETAILED_CHANGE_DETECT_LOG) debugLog { "[ChangeDetect] Hot-paths saving: $hotPathsJson" }
-                debugLog { "[ChangeDetect] Hot-paths cache saved: ${hotPathsCache.size} entries" }
                 traceDebug { "[ChangeDetect] Hot-paths cache saved: ${hotPathsCache.size} entries" }
             } catch (e: Exception) {
                 Timber.e(e, "[ChangeDetect] Failed to save hot-paths cache")
-                debugLog { "[ChangeDetect] Failed to save hot-paths cache: ${e.message}" }
             }
         }
 

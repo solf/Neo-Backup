@@ -51,7 +51,6 @@ import com.machiav3lli.backup.manager.actions.BaseAppAction.Companion.ignoredPac
 import com.machiav3lli.backup.manager.handler.LogsHandler.Companion.logException
 import com.machiav3lli.backup.manager.handler.ShellCommands.Companion.currentProfile
 import com.machiav3lli.backup.manager.handler.ShellHandler.Companion.runAsRoot
-import com.machiav3lli.backup.manager.handler.debugLog
 import com.machiav3lli.backup.ui.pages.pref_backupSuspendApps
 import com.machiav3lli.backup.ui.pages.pref_createInvalidBackups
 import com.machiav3lli.backup.ui.pages.pref_earlyEmptyBackups
@@ -266,14 +265,10 @@ suspend fun scanBackups(
                     if (relativePath !in referencedApkDirs) {
                         // Orphaned APK directory - mark for cleanup
                         NeoApp.hitBusy()
-                        debugLog { "[ApkDedup] ${packageDir.name}: ORPHAN - ${apkVersionDir.name}" }
                         renameDamagedToERROR(apkVersionDir, "orphaned-apk")
                         orphanCount++
                     }
                 }
-            }
-            if (orphanCount > 0) {
-                debugLog { "[ApkDedup] ${packageDir.name}: found $orphanCount orphaned APK director${if (orphanCount == 1) "y" else "ies"}" }
             }
         }
     }
@@ -950,11 +945,9 @@ suspend fun Context.updateAppTables() {
                 staleKeys.forEach { key ->
                     NeoApp.removeHotPath(key)
                     val packageName = key.substringBefore(":")
-                    debugLog { "[ChangeDetect] Cleaned up hot-path for removed app: $packageName" }
                     Timber.d("[ChangeDetect] Cleaned up hot-path for removed app: $packageName")
                 }
                 
-                debugLog { "[ChangeDetect] Cleanup complete: removed ${staleKeys.size} stale hot-path entries" }
                 Timber.d("[ChangeDetect] Cleanup complete: removed ${staleKeys.size} stale hot-path entries")
             }
         } catch (e: Exception) {

@@ -19,7 +19,6 @@ package com.machiav3lli.backup.utils
 
 import com.machiav3lli.backup.data.dbs.entity.Backup
 import com.machiav3lli.backup.data.entity.StorageFile
-import com.machiav3lli.backup.manager.handler.debugLog
 import com.topjohnwu.superuser.io.SuFile
 import timber.log.Timber
 import java.io.File
@@ -115,7 +114,6 @@ object ApkDeduplicationHelper {
             return hashHex.takeLast(8)
         } catch (e: Exception) {
             Timber.e(e, "Failed to calculate APK hash for: ${apkPaths.joinToString()}")
-            debugLog { "[ApkDedup] Hash calculation failed, using fallback for: ${apkPaths.joinToString { File(it).name }}" }
             // Return a fallback hash based on paths
             return apkPaths.joinToString("").hashCode().toString(16).takeLast(8).padStart(8, '0')
         }
@@ -155,7 +153,6 @@ object ApkDeduplicationHelper {
             }
 
             Timber.d("All APKs verified in dedup directory: ${dedupDir.path}")
-            debugLog { "[ApkDedup] Verified APK match: ${dedupDir.name}" }
             return true
         } catch (e: Exception) {
             Timber.e(e, "Failed to verify APK match in: ${dedupDir.path}")

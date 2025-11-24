@@ -8,7 +8,6 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.machiav3lli.backup.NeoApp
 import com.machiav3lli.backup.R
-import com.machiav3lli.backup.manager.handler.debugLog
 import com.machiav3lli.backup.manager.handler.generateUniqueNotificationId
 import com.machiav3lli.backup.manager.handler.showNotification
 import com.machiav3lli.backup.ui.activities.NeoActivity
@@ -37,10 +36,7 @@ class PersistentOperationService : Service() {
         val operationId = intent?.getStringExtra("operationId")
         notificationId = generateUniqueNotificationId()
         
-        debugLog { "PersistentOperationService starting: $title, operationId=$operationId" }
-        
         if (operationId == null) {
-            debugLog { "PersistentOperationService ERROR: No operationId provided, stopping service" }
             Timber.e("No operationId provided, stopping service")
             stopSelf()
             return START_NOT_STICKY
@@ -65,7 +61,6 @@ class PersistentOperationService : Service() {
             // Retrieve and remove operation from map (thread-safe)
             val operation = pendingOperations.remove(operationId)
             if (operation == null) {
-                debugLog { "PersistentOperationService WARNING: No pending operation found for ID: $operationId" }
                 Timber.w("No pending operation found for ID: $operationId")
                 return
             }
@@ -94,10 +89,7 @@ class PersistentOperationService : Service() {
                 getString(R.string.operation_completed_generic),
                 true
             )
-            
-            debugLog { "PersistentOperationService completed: $title, operationId=$operationId" }
         } catch (e: Exception) {
-            debugLog { "PersistentOperationService EXCEPTION: Operation failed: $title, operationId=$operationId, error=${e.message}" }
             Timber.e(e, "Operation failed: $title")
             showNotification(
                 this,
@@ -131,7 +123,6 @@ class PersistentOperationService : Service() {
     }
     
     override fun onDestroy() {
-        debugLog { "PersistentOperationService destroyed" }
         job.cancel()
         super.onDestroy()
     }

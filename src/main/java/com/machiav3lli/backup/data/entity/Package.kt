@@ -33,7 +33,6 @@ import com.machiav3lli.backup.ui.pages.pref_flatStructure
 import com.machiav3lli.backup.ui.pages.pref_ignoreLockedInHousekeeping
 import com.machiav3lli.backup.ui.pages.pref_paranoidBackupLists
 import com.machiav3lli.backup.data.preferences.NeoPrefs
-import com.machiav3lli.backup.manager.handler.debugLog
 import com.machiav3lli.backup.utils.ChangeDetectionUtils
 import com.machiav3lli.backup.utils.FileUtils
 import com.machiav3lli.backup.utils.StorageLocationNotConfiguredException
@@ -251,7 +250,6 @@ data class Package private constructor(val packageName: String) : KoinComponent 
         
         // Clean up deduplicated APK directory if no longer referenced
         val apkStorageDir = backup.apkStorageDir
-        debugLog { "[ApkDedup] <$packageName>: DELETE_CHECK - apkStorageDir=$apkStorageDir" }
         
         if (apkStorageDir != null) {
             try {
@@ -266,34 +264,23 @@ data class Package private constructor(val packageName: String) : KoinComponent 
                     // No other backups reference this APK directory - safe to delete
                     val appBackupBaseDir = getAppBackupBaseDir(create = false)
                     if (appBackupBaseDir == null) {
-                        debugLog { "[ApkDedup] <$packageName>: DELETE_SKIP - appBackupBaseDir is null" }
+                        // Skip deletion
                     } else {
-                        debugLog { "[ApkDedup] <$packageName>: DELETE_PATH - appBackupBaseDir=${appBackupBaseDir.path}, looking for $apkStorageDir" }
                         var apkDir = appBackupBaseDir.findFileByPath(apkStorageDir)
                         // 2025-11-22 solf: I have no idea why it can be null here, but cache invalidation helps
                         if (apkDir == null) {
-                            debugLog { "[ApkDedup] <$packageName>: DELETE_NOTFOUND - first attempt failed, invalidating cache and retrying" }
                             StorageFile.invalidateCache(appBackupBaseDir)
                             apkDir = appBackupBaseDir.findFileByPath(apkStorageDir)
-                            if (apkDir == null) {
-                                debugLog { "[ApkDedup] <$packageName>: DELETE_SKIP - still not found after cache invalidation: $apkStorageDir" }
-                            } else {
-                                debugLog { "[ApkDedup] <$packageName>: DELETE_FOUND - found after cache invalidation" }
-                            }
                         }
                         
                         if (apkDir != null) {
                             traceBackups { "<$packageName> Cleaning up unreferenced APK directory: $apkStorageDir" }
-                            debugLog { "[ApkDedup] <$packageName>: DELETE - $apkStorageDir (refs=0)" }
                             runOrLog { apkDir.deleteRecursive() }
                         }
                     }
-                } else {
-                    debugLog { "[ApkDedup] <$packageName>: KEEP - $apkStorageDir (refs=$referenceCount)" }
                 }
             } catch (e: Throwable) {
                 // Log error but don't fail backup deletion
-                debugLog { "[ApkDedup] <$packageName>: DELETE_ERROR - ${e.javaClass.simpleName}: ${e.message}" }
                 com.machiav3lli.backup.manager.handler.LogsHandler.logException(
                     e,
                     "<$packageName> Failed to cleanup APK directory: $apkStorageDir"
@@ -423,8 +410,6 @@ data class Package private constructor(val packageName: String) : KoinComponent 
                     0L
                 }
             } catch (e: Exception) {
-                val appBackupBaseDir = try { getAppBackupBaseDir(create = false) } catch (_: Exception) { null }
-                debugLog { "[ApkSize] <$packageName>: FAILED to calculate APK size - appBackupBaseDir=${appBackupBaseDir?.path}, exception=${e.javaClass.simpleName}: ${e.message}" }
                 Timber.w("Failed to calculate APK size for $packageName: $e")
                 0L
             }
@@ -441,7 +426,6 @@ data class Package private constructor(val packageName: String) : KoinComponent 
                 }
             }
         } catch (e: Exception) {
-            debugLog { "[ApkSize] Error calculating directory size for ${directory.path}: ${e.javaClass.simpleName}: ${e.message}" }
             Timber.w("Error calculating directory size: $e")
         }
         return totalSize
@@ -515,7 +499,6 @@ data class Package private constructor(val packageName: String) : KoinComponent 
             
             // Check version code first (quick check - catches both upgrades and downgrades)
             if (lastBackup.versionCode != versionCode) {
-                debugLog { "[ChangeDetect] $packageName: version changed (${lastBackup.versionCode} -> $versionCode)" }
                 Timber.d("[ChangeDetect] $packageName: version changed (${lastBackup.versionCode} -> $versionCode)")
                 return true
             }
@@ -587,11 +570,9 @@ data class Package private constructor(val packageName: String) : KoinComponent 
                         val hotFile = RootFile(dir, hotPath)
                         val exists = hotFile.exists()
                         val fullPath = hotFile.absolutePath
-                        if (NeoApp.DETAILED_CHANGE_DETECT_LOG) debugLog { "[ChangeDetect] $packageName: PHASE-1 checking $dirType hotPath=$hotPath fullPath=$fullPath exists=$exists" }
                         if (exists) {
                             val hotTimestamp = hotFile.lastModified()
                             if (hotTimestamp > lastBackupTimeMillis) {
-                                debugLog { "[ChangeDetect] $packageName: changes detected in $dirType at $hotPath (full: $fullPath) (timestamp=$hotTimestamp >= $lastBackupTimeMillis) (hot-path ✓ PHASE-1)" }
                                 Timber.d("[ChangeDetect] $packageName: changes detected in $dirType at $hotPath (full: $fullPath) (timestamp=$hotTimestamp >= $lastBackupTimeMillis) (hot-path ✓ PHASE-1)")
                                 
                                 // Update last changed type
@@ -603,7 +584,6 @@ data class Package private constructor(val packageName: String) : KoinComponent 
                     }
                 }
                 
-                debugLog { "[ChangeDetect] $packageName: PHASE-1 complete (hot-paths), no changes found, proceeding to PHASE-2 (full scan)" }
                 Timber.d("[ChangeDetect] $packageName: PHASE-1 complete (hot-paths), no changes found, proceeding to PHASE-2 (full scan)")
                 
                 // PHASE 2: Full BFS scan (only if Phase 1 found nothing)
@@ -621,7 +601,6 @@ data class Package private constructor(val packageName: String) : KoinComponent 
                     
                     if (result.hasChanges) {
                         val fullPath = if (result.foundPath != null) File(dirPath, result.foundPath).absolutePath else dirPath
-                        debugLog { "[ChangeDetect] $packageName: changes detected in $dirType at ${result.foundPath} (full: $fullPath) (timestamp=${result.foundTimestamp} >= $lastBackupTimeMillis) (PHASE-2 full-scan)" }
                         Timber.d("[ChangeDetect] $packageName: changes detected in $dirType at ${result.foundPath} (full: $fullPath) (timestamp=${result.foundTimestamp} >= $lastBackupTimeMillis) (PHASE-2 full-scan)")
                         
                         // Update hot path and last changed type
@@ -634,13 +613,11 @@ data class Package private constructor(val packageName: String) : KoinComponent 
                     }
                 }
                 
-                debugLog { "[ChangeDetect] $packageName: no changes since ${lastBackup.backupDate} (scanned depth=$scanDepth, 2-phase complete)" }
                 Timber.d("[ChangeDetect] $packageName: no changes since ${lastBackup.backupDate} (scanned depth=$scanDepth, 2-phase complete)")
                 return false
                 
             } catch (e: Exception) {
                 // If we can't check, treat as changed to be safe
-                debugLog { "[ChangeDetect] $packageName: error checking data, treating as changed: ${e.message}" }
                 Timber.d("[ChangeDetect] $packageName: error checking data, treating as changed: ${e.message}")
                 return true
             }

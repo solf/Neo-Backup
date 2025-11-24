@@ -37,9 +37,7 @@ import com.machiav3lli.backup.data.dbs.repository.ScheduleRepository
 import com.machiav3lli.backup.data.preferences.pref_autoLogAfterSchedule
 import com.machiav3lli.backup.data.preferences.pref_autoLogSuspicious
 import com.machiav3lli.backup.data.preferences.traceSchedule
-import com.machiav3lli.backup.manager.handler.debugLog
 import com.machiav3lli.backup.manager.handler.generateUniqueNotificationId
-import com.machiav3lli.backup.manager.handler.getCompactStackTrace
 import com.machiav3lli.backup.manager.handler.LogsHandler
 import com.machiav3lli.backup.manager.handler.ScheduleLogHandler
 import com.machiav3lli.backup.manager.handler.WorkHandler
@@ -92,16 +90,13 @@ class ScheduleWork(
     private val scheduleJob = Job()
 
     override suspend fun getForegroundInfo(): ForegroundInfo {
-        debugLog { "[NOTIF-FOREGROUND] ScheduleWork.getForegroundInfo() ENTRY: scheduleId=$scheduleId, notificationId=$notificationId | ${getCompactStackTrace()}" }
         val notification = createForegroundNotification()
-        val title = notification.extras?.getCharSequence("android.title")?.toString() ?: ""
         val foregroundInfo = ForegroundInfo(
             notification.hashCode(),
             notification,
             if (Android.minSDK(Build.VERSION_CODES.Q)) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
             else 0
         )
-        debugLog { "[NOTIF-FOREGROUND] ScheduleWork.getForegroundInfo() returning ForegroundInfo: id=${notification.hashCode()}, scheduleId=$scheduleId, title='$title'" }
         return foregroundInfo
     }
 
@@ -110,11 +105,7 @@ class ScheduleWork(
             scheduleId = inputData.getLong(EXTRA_SCHEDULE_ID, -1L)
             val name = inputData.getString(EXTRA_NAME) ?: ""
 
-            debugLog { "ScheduleWork.doWork() ENTRY: scheduleId=$scheduleId, name='$name'" }
-            debugLog { "ScheduleWork.doWork() call stack: ${getCompactStackTrace()}" }
-
             if (USE_CENTRALIZED_FOREGROUND_INSTEAD_OF_LEGACY && pref_useForegroundInJob.value) {
-                debugLog { "[NOTIF-FOREGROUND] ScheduleWork.doWork() setting foreground for entire schedule: scheduleId=$scheduleId" }
                 setForeground(getForegroundInfo())
             }
 
@@ -127,17 +118,14 @@ class ScheduleWork(
             }
 
             if (scheduleId < 0) {
-                debugLog { "ScheduleWork.doWork() FAILED: scheduleId < 0" }
                 return@withContext Result.failure()
             }
 
             // Atomically check if already running and register if not
             val putResult = runningSchedules.putIfAbsent(scheduleId, false)
-            debugLog { "ScheduleWork.doWork() duplicate check: putIfAbsent result=$putResult" }
             if (putResult != null) {
                 val message =
                     "[$scheduleId] duplicate schedule detected: $name (as designed, ignored)"
-                debugLog { "ScheduleWork.doWork() DUPLICATE DETECTED: returning failure" }
                 Timber.w(message)
                 if (pref_autoLogSuspicious.value) {
                     textLog(
@@ -155,34 +143,26 @@ class ScheduleWork(
             var totalSize = 0L
 
             val repeatCount = 1 + pref_fakeScheduleDups.value
-            debugLog { "ScheduleWork.doWork() repeat loop: count=$repeatCount (pref_fakeScheduleDups=${pref_fakeScheduleDups.value})" }
             repeat(repeatCount) { iteration ->
-                debugLog { "ScheduleWork.doWork() repeat iteration $iteration/$repeatCount START" }
                 val now = SystemUtils.now
                 runningSchedules[scheduleId] = true
                 val startTime = System.currentTimeMillis()
                 val stats = processSchedule(name, now)
                 val elapsed = System.currentTimeMillis() - startTime
-                debugLog { "ScheduleWork.doWork() processSchedule() returned: stats=$stats, elapsed=${elapsed}ms" }
                 if (stats == null) {
-                    debugLog { "ScheduleWork.doWork() processSchedule() returned NULL, returning failure" }
                     return@withContext Result.failure()
                 }
                 // Accumulate statistics across multiple runs
                 totalBackedUp += stats.backedUpCount
                 totalSkipped += stats.skippedCount
                 totalSize += stats.totalSize
-                debugLog { "ScheduleWork.doWork() repeat iteration $iteration/$repeatCount END: accumulated backedUp=$totalBackedUp, skipped=$totalSkipped, size=$totalSize" }
             }
 
-            debugLog { "ScheduleWork.doWork() all iterations complete, returning SUCCESS" }
             Result.success()
         } catch (e: Exception) {
-            debugLog { "ScheduleWork.doWork() EXCEPTION: ${e.javaClass.simpleName}: ${e.message}" }
             Timber.e(e)
             Result.failure()
         } finally {
-            debugLog { "ScheduleWork.doWork() FINALLY: cleaning up, removing scheduleId=$scheduleId from runningSchedules" }
             runningSchedules.remove(scheduleId)
             NeoApp.wakelock(false)
         }
@@ -190,8 +170,6 @@ class ScheduleWork(
 
     private suspend fun processSchedule(name: String, now: Long): ScheduleStats? =
         coroutineScope {
-            debugLog { "processSchedule() ENTRY: name='$name', now=$now, scheduleId=$scheduleId" }
-            
             // Show "Fetching apps list" notification while building package list
             showNotification(
                 context,
@@ -204,12 +182,9 @@ class ScheduleWork(
                 "",
                 true
             )
-            debugLog { "[NOTIF-CREATE] processSchedule() posted 'Fetching...' notification: id=$fetchingNotificationId" }
             
             val schedule = scheduleRepo.getSchedule(scheduleId)
-            debugLog { "processSchedule() getSchedule: schedule=${if (schedule != null) "found" else "NULL"}" }
             if (schedule == null) {
-                debugLog { "processSchedule() EXIT: schedule is NULL, returning null" }
                 return@coroutineScope null
             }
 
@@ -217,10 +192,8 @@ class ScheduleWork(
             ScheduleLogHandler.writeScheduleStart(name, java.time.LocalDateTime.now())
 
             val selectedItems = getFilteredPackages(schedule)
-            debugLog { "processSchedule() getFilteredPackages: count=${selectedItems.size}" }
 
             if (selectedItems.isEmpty()) {
-                debugLog { "processSchedule() EXIT: selectedItems is empty, returning null" }
                 handleEmptySelectedItems(name)
                 ScheduleLogHandler.writeScheduleEnd(name, 0, 0, 0, 0, java.time.LocalDateTime.now())
                 return@coroutineScope null
@@ -228,9 +201,7 @@ class ScheduleWork(
 
             val notificationManager =
                 context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            debugLog { "[NOTIF-CANCEL] ScheduleWork.processSchedule() canceling fetching notification: id=$fetchingNotificationId, scheduleId=$scheduleId | ${getCompactStackTrace()}" }
             notificationManager.cancel(fetchingNotificationId)
-            debugLog { "[NOTIF-CANCEL] ScheduleWork.processSchedule() fetching notification canceled: id=$fetchingNotificationId" }
 
             // Update schedule time if this is a periodic schedule
             if (inputData.getBoolean(EXTRA_PERIODIC, false) && schedule != null) {
@@ -245,15 +216,12 @@ class ScheduleWork(
                 schedule = schedule,
                 scheduleName = name
             )
-            debugLog { "processSchedule() enqueued batch via WorkHandler: batchName='$batchName', packageCount=${selectedItems.size}" }
 
             if (selectedItems.isNotEmpty()) {
                 if (beginSchedule(name, "queueing work")) {
-                    debugLog { "processSchedule() awaiting WorkHandler batch completion signal" }
                     val awaitStartTime = System.currentTimeMillis()
                     val workInfos = batchState.completionSignal!!.await()  // Receives List<WorkInfo>
                     val awaitElapsed = System.currentTimeMillis() - awaitStartTime
-                    debugLog { "processSchedule() batch completion signal received after ${awaitElapsed}ms with ${workInfos.size} WorkInfo objects" }
                     
                     // Calculate statistics from WorkInfo list
                     val succeeded = workInfos.count { it.state == androidx.work.WorkInfo.State.SUCCEEDED }
@@ -279,8 +247,6 @@ class ScheduleWork(
                     
                     val totalSize = succeededBackupInfos.sumOf { it.outputData.getLong("backupSize", 0L) }
                     
-                    debugLog { "processSchedule() calculated statistics: total=${workInfos.size}, succeeded=$succeeded, failed=$failed, cancelled=$cancelled, backedUp=$backedUpCount, skipped=$skippedCount, size=$totalSize" }
-                    
                     // Log summary to schedules.log
                     traceSchedule {
                         "[$scheduleId] '$name' completed: ${workInfos.size} packages, $backedUpCount backed up, $skippedCount skipped, $failed failed, ${totalSize / 1024}KB total"
@@ -291,7 +257,6 @@ class ScheduleWork(
                     selectedItems.fastForEach {
                         packageRepo.updatePackage(it)
                     }
-                    debugLog { "processSchedule() calling writeScheduleEnd: backedUp=$backedUpCount, skipped=$skippedCount, $failed failed, size=$totalSize" }
                     ScheduleLogHandler.writeScheduleEnd(
                         scheduleName = name,
                         backedUpCount = backedUpCount,
@@ -300,7 +265,6 @@ class ScheduleWork(
                         totalSizeBytes = totalSize,
                         timestamp = java.time.LocalDateTime.now()
                     )
-                    debugLog { "processSchedule() writeScheduleEnd COMPLETED" }
                     
                     ScheduleStats(
                         backedUpCount = backedUpCount,
@@ -308,12 +272,10 @@ class ScheduleWork(
                         totalSize = totalSize
                     )
                 } else {
-                    debugLog { "processSchedule() beginSchedule returned false (duplicate), returning null" }
                     endSchedule(name, "duplicate detected")
                     null
                 }
             } else {
-                debugLog { "processSchedule() worksList is empty, returning null" }
                 beginSchedule(name, "no work")
                 endSchedule(name, "no work")
                 null
@@ -409,9 +371,7 @@ class ScheduleWork(
 
     @Synchronized
     private fun createForegroundNotification(): Notification {
-        debugLog { "[NOTIF-CREATE] ScheduleWork.createForegroundNotification() ENTRY: scheduleId=$scheduleId, notificationId=$notificationId, cached=${notification != null} | ${getCompactStackTrace()}" }
         if (notification != null) {
-            debugLog { "[NOTIF-CREATE] ScheduleWork.createForegroundNotification() returning CACHED notification: scheduleId=$scheduleId" }
             return notification!!
         }
 
@@ -438,7 +398,6 @@ class ScheduleWork(
             PendingIntent.FLAG_IMMUTABLE
         )
 
-        debugLog { "[NOTIF-CREATE] ScheduleWork.createForegroundNotification() building NEW notification: scheduleId=$scheduleId, channel=$CHANNEL_ID" }
         return NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentTitle(context.getString(R.string.sched_notificationMessage))
             .setSmallIcon(R.drawable.ic_launcher_foreground)
@@ -455,8 +414,6 @@ class ScheduleWork(
             .build()
             .also {
                 notification = it
-                val title = it.extras?.getCharSequence("android.title")?.toString() ?: ""
-                debugLog { "[NOTIF-CREATE] ScheduleWork.createForegroundNotification() notification built and cached: scheduleId=$scheduleId, hashCode=${it.hashCode()}, title='$title'" }
             }
     }
 
@@ -481,7 +438,6 @@ class ScheduleWork(
 
         fun enqueuePeriodic(schedule: Schedule, reschedule: Boolean = false) {
             if (!schedule.enabled) return
-            debugLog { "ScheduleWork.enqueuePeriodic() ENTRY: scheduleId=${schedule.id}, name='${schedule.name}', reschedule=$reschedule | ${getCompactStackTrace()}" }
             val workManager = get<WorkManager>(WorkManager::class.java)
 
             val (timeToRun, initialDelay) = calcRuntimeDiff(schedule)
@@ -525,17 +481,14 @@ class ScheduleWork(
         }
 
         fun enqueueImmediate(schedule: Schedule) {
-            debugLog { "ScheduleWork.enqueueImmediate() ENTRY: scheduleId=${schedule.id}, name='${schedule.name}' | ${getCompactStackTrace()}" }
             enqueueOnce(schedule.id, schedule.name, false)
         }
 
         fun enqueueScheduled(scheduleId: Long, scheduleName: String) {
-            debugLog { "ScheduleWork.enqueueScheduled() ENTRY: scheduleId=$scheduleId, name='$scheduleName' | ${getCompactStackTrace()}" }
             enqueueOnce(scheduleId, scheduleName, true)
         }
 
         private fun enqueueOnce(scheduleId: Long, scheduleName: String, periodic: Boolean) {
-            debugLog { "ScheduleWork.enqueueOnce() ENTRY: scheduleId=$scheduleId, name='$scheduleName', periodic=$periodic | ${getCompactStackTrace()}" }
             val scheduleWorkRequest = OneTimeWorkRequestBuilder<ScheduleWork>()
                 .setInputData(
                     workDataOf(

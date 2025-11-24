@@ -39,7 +39,6 @@ import com.machiav3lli.backup.manager.handler.BackupBuilder
 import com.machiav3lli.backup.manager.handler.LogsHandler
 import com.machiav3lli.backup.manager.handler.PGPHandler
 import com.machiav3lli.backup.manager.handler.ShellHandler
-import com.machiav3lli.backup.manager.handler.debugLog
 import com.machiav3lli.backup.manager.handler.ShellHandler.Companion.isFileNotFoundException
 import com.machiav3lli.backup.manager.handler.ShellHandler.Companion.quote
 import com.machiav3lli.backup.manager.handler.ShellHandler.Companion.runAsRoot
@@ -202,7 +201,6 @@ open class BackupAppAction(context: Context, work: AppActionWork?, shell: ShellH
                 val copiedApkSize = backupBuilder.getCopiedApkSize()
                 val backupSize = dataSize + copiedApkSize
                 backupBuilder.setSize(backupSize)
-                debugLog { "[BackupSize] <${app.packageName}>: data=${dataSize / 1024}KB, copiedApk=${copiedApkSize / 1024}KB, total=${backupSize / 1024}KB" }
 
                 backup = backupBuilder.createBackup()
 
@@ -556,7 +554,6 @@ open class BackupAppAction(context: Context, work: AppActionWork?, shell: ShellH
                     )
                     backupBuilder.setApkStorageDir(relativePath)
                     Timber.i("<${app.packageName}> APK already deduplicated at: $relativePath")
-                    debugLog { "[ApkDedup] <${app.packageName}>: SKIP - $dedupDirName" }
                 } else {
                     // APK doesn't exist or doesn't match - create new dedup directory
                     val newDedupDir = apkSubDir?.createDirectory(dedupDirName)
@@ -582,7 +579,6 @@ open class BackupAppAction(context: Context, work: AppActionWork?, shell: ShellH
                     // Calculate size of newly copied APKs
                     val copiedApkSize = newDedupDir.listFiles().sumOf { it.size }
                     backupBuilder.setCopiedApkSize(copiedApkSize)
-                    debugLog { "[ApkDedup] <${app.packageName}>: COPY - $dedupDirName, size=${copiedApkSize / 1024}KB" }
 
                     // Store reference to dedup directory
                     val relativePath = ApkDeduplicationHelper.getRelativeApkPath(
@@ -593,7 +589,6 @@ open class BackupAppAction(context: Context, work: AppActionWork?, shell: ShellH
                     )
                     backupBuilder.setApkStorageDir(relativePath)
                     Timber.i("<${app.packageName}> Created deduplicated APK at: $relativePath")
-                    debugLog { "[ApkDedup] <${app.packageName}>: COPY - $dedupDirName" }
                 }
             } catch (e: BackupFailedException) {
                 throw e

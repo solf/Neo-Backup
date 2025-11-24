@@ -46,9 +46,7 @@ import com.machiav3lli.backup.manager.handler.BackupRestoreHelper
 import com.machiav3lli.backup.manager.handler.LogsHandler
 import com.machiav3lli.backup.manager.handler.WorkHandler.Companion.getVar
 import com.machiav3lli.backup.manager.handler.WorkHandler.Companion.setVar
-import com.machiav3lli.backup.manager.handler.debugLog
 import com.machiav3lli.backup.manager.handler.getSpecial
-import com.machiav3lli.backup.manager.handler.getCompactStackTrace
 import com.machiav3lli.backup.manager.handler.ScheduleLogHandler
 import com.machiav3lli.backup.manager.handler.showNotification
 import com.machiav3lli.backup.manager.services.CommandReceiver
@@ -90,17 +88,13 @@ class AppActionWork(val context: Context, workerParams: WorkerParameters) :
             var actionResult: ActionResult? = null
             
             try {
-                debugLog { "[WORKER-START] AppActionWork.doWork() ENTRY: packageName=$packageName, batchName=$batchName, backup=$backupBoolean | ${getCompactStackTrace()}" }
-
                 if (!USE_CENTRALIZED_WAKELOCKS_INSTEAD_OF_PER_WORKER) {
                     NeoApp.wakelock(true)
                 }
 
                 if (pref_useForegroundInJob.value && !USE_CENTRALIZED_FOREGROUND_INSTEAD_OF_LEGACY) {               //TODO hg42 the service already does this?
                     //if (inputData.getBoolean("immediate", false))
-                    debugLog { "[NOTIF-SHOW] AppActionWork.doWork() SHOWING foreground notification: packageName=$packageName, notificationId=$notificationId | ${getCompactStackTrace()}" }
                     setForeground(getForegroundInfo())
-                    debugLog { "[NOTIF-SHOW] AppActionWork.doWork() foreground notification SHOWN: packageName=$packageName" }
                     //setForegroundAsync(getForegroundInfo())  //TODO hg42 what's the difference?
                 }
 
@@ -168,7 +162,6 @@ class AppActionWork(val context: Context, workerParams: WorkerParameters) :
                         }
                     }
                 } catch (e: Throwable) {
-                    debugLog { "[WORKER-EXCEPTION] AppActionWork.doWork() caught exception: packageName=$packageName, exception=${e.javaClass.simpleName}: ${e.message}" }
                     LogsHandler.unexpectedException(e, packageLabel)
                 }
 
@@ -210,7 +203,6 @@ class AppActionWork(val context: Context, workerParams: WorkerParameters) :
                         }
                         else -> "RESTORE"
                     }
-                    debugLog { "[WORKER-SUCCESS] AppActionWork.doWork() succeeded: packageName=$packageName, action=$actionIndicator" }
                     Result.success(getWorkData("OK", actionResult))
                 } else {
                     failures++
@@ -218,7 +210,6 @@ class AppActionWork(val context: Context, workerParams: WorkerParameters) :
                     if (failures <= pref_maxRetriesPerPackage.value) {
                         setOperation("======>fail")
                         Timber.w("package: $packageName failures: $failures -> retry")
-                        debugLog { "[WORKER-RETRY] AppActionWork.doWork() retrying: packageName=$packageName, failures=$failures/${pref_maxRetriesPerPackage.value}" }
                         Result.retry()
                     } else {
                         // Log failure to schedules.log if this is a scheduled backup
@@ -243,7 +234,6 @@ class AppActionWork(val context: Context, workerParams: WorkerParameters) :
                         )
                         setOperation("======>FAIL")
                         Timber.w("package: $packageName FAILED")
-                        debugLog { "[WORKER-FAILURE] AppActionWork.doWork() failed permanently: packageName=$packageName, message=${actionResult?.message}" }
                         Result.failure(getWorkData("ERR", actionResult))
                     }
                 }
@@ -266,7 +256,6 @@ class AppActionWork(val context: Context, workerParams: WorkerParameters) :
                 } else {
                     "FAILED:${actionResult?.message?.take(50) ?: "unknown"}"
                 }
-                debugLog { "[WORKER-EXIT] AppActionWork.doWork() exiting: packageName=$packageName, status=$finalStatus" }
             }
         }
     }
