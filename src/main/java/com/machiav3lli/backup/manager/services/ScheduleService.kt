@@ -100,8 +100,6 @@ open class ScheduleService : Service() {
 
         debugLog { "ScheduleService.onStartCommand() ENTRY: scheduleId=$scheduleId, name='$scheduleName', startId=$startId, action=$action" }
 
-        NeoApp.wakelock(true)
-
         traceSchedule {
             var message =
                 "[$scheduleId] %%%%% ############################################################ ScheduleService startId=$startId PID=${Process.myPid()} starting for name='$scheduleName'"
@@ -120,7 +118,6 @@ open class ScheduleService : Service() {
                     debugLog { "ScheduleService.onStartCommand() ACTION_CANCEL: calling stopSelf()" }
                     traceSchedule { "[$scheduleId] name='$scheduleName' action=$action" }
                     ScheduleWork.cancel(scheduleId)
-                    NeoApp.wakelock(false)
                     traceSchedule { "%%%%% service stop" }
                     stopSelf()
                 }
@@ -176,34 +173,19 @@ open class ScheduleService : Service() {
                     "[$scheduleId] '$scheduleName' $workType work already queued/running in WorkManager (states: $workStates), skipping duplicate enqueue" 
                 }
                 Timber.i("[$scheduleId] Duplicate schedule prevented by ScheduleService WorkManager check: $workType work in states [$workStates]")
-                
-                // Still schedule next alarm for future runs
-                debugLog { "ScheduleService.onStartCommand() duplicate case: scheduling next alarm" }
-                scheduleAlarmsOnce(this)
-                
-                // Shutdown service after brief delay
-                debugLog { "ScheduleService.onStartCommand() duplicate case: scheduling service shutdown" }
-                CoroutineScope(Dispatchers.IO).launch {
-                    delay(1000)  // Brief delay
-                    debugLog { "ScheduleService duplicate case: calling stopSelf() after delay" }
-                    stopSelf()
+            } else {
+                // Safe to enqueue - no existing work found
+                debugLog { "ScheduleService.onStartCommand() no duplicate found, proceeding with enqueue: scheduleId=$scheduleId" }
+                val repeatCount = 1 + pref_fakeScheduleDups.value
+                debugLog { "ScheduleService.onStartCommand() repeatCount=$repeatCount (pref_fakeScheduleDups=${pref_fakeScheduleDups.value})" }
+                repeat(repeatCount) { count ->
+                    debugLog { "ScheduleService.onStartCommand() repeat iteration $count: enqueueing schedule" }
+                    CoroutineScope(Dispatchers.IO).launch {
+                        scheduleNextAlarm(this@ScheduleService, scheduleId, true)
+                    }
+                    ScheduleWork.enqueueScheduled(scheduleId, scheduleName)
+                    traceSchedule { "[$scheduleId] starting task for schedule${if (count > 0) " (dup $count)" else ""}" }
                 }
-                NeoApp.wakelock(false)
-                debugLog { "ScheduleService.onStartCommand() duplicate case: EXIT, returning START_NOT_STICKY" }
-                return START_NOT_STICKY
-            }
-            
-            // Safe to enqueue - no existing work found
-            debugLog { "ScheduleService.onStartCommand() no duplicate found, proceeding with enqueue: scheduleId=$scheduleId" }
-            val repeatCount = 1 + pref_fakeScheduleDups.value
-            debugLog { "ScheduleService.onStartCommand() repeatCount=$repeatCount (pref_fakeScheduleDups=${pref_fakeScheduleDups.value})" }
-            repeat(repeatCount) { count ->
-                debugLog { "ScheduleService.onStartCommand() repeat iteration $count: enqueueing schedule" }
-                CoroutineScope(Dispatchers.IO).launch {
-                    scheduleNextAlarm(this@ScheduleService, scheduleId, true)
-                }
-                ScheduleWork.enqueueScheduled(scheduleId, scheduleName)
-                traceSchedule { "[$scheduleId] starting task for schedule${if (count > 0) " (dup $count)" else ""}" }
             }
         }
 
@@ -222,7 +204,6 @@ open class ScheduleService : Service() {
             stopSelf()
         }
 
-        NeoApp.wakelock(false)
         debugLog { "ScheduleService.onStartCommand() EXIT: returning START_NOT_STICKY" }
         return START_NOT_STICKY
     }
