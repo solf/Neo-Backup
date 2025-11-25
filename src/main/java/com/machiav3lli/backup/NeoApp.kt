@@ -556,8 +556,9 @@ class NeoApp : Application(), KoinStartup {
         private var wakeLockNested = AtomicInteger(0)
         private const val WAKELOCK_TAG = "NeoBackup:Application"
         
-        // Hot-paths cache for change detection (loaded on wakelock acquire, saved on release)
-        private var hotPathsCache = ConcurrentHashMap<String, String>()
+        // Hot-paths cache for change detection (null = not loaded, empty map = loaded but empty)
+        @Volatile
+        private var hotPathsCache: ConcurrentHashMap<String, String>? = null
         
         const val DETAILED_CHANGE_DETECT_LOG = true
 
@@ -576,25 +577,6 @@ class NeoApp : Application(), KoinStartup {
                         val pm: PowerManager = get(PowerManager::class.java)
                         theWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKELOCK_TAG)
                         theWakeLock?.acquire(60 * 60 * 1000L)
-                        
-                        // Load hot-paths cache from preferences
-                        try {
-                            val prefs = get<NeoPrefs>(NeoPrefs::class.java)
-                            val hotPathsJson = prefs.changeDetectionHotPaths.value
-                            val loadedMap = try {
-                                Json.decodeFromString<Map<String, String>>(hotPathsJson)
-                            } catch (e: Exception) {
-                                emptyMap()
-                            }
-                            hotPathsCache.clear()
-                            hotPathsCache.putAll(loadedMap)
-                            if (DETAILED_CHANGE_DETECT_LOG) debugLog { "[ChangeDetect] Hot-paths loaded: $hotPathsJson" }
-                            debugLog { "[ChangeDetect] Hot-paths cache loaded: ${hotPathsCache.size} entries" }
-                            traceDebug { "[ChangeDetect] Hot-paths cache loaded: ${hotPathsCache.size} entries" }
-                        } catch (e: Exception) {
-                            Timber.e(e, "[ChangeDetect] Failed to load hot-paths cache")
-                            debugLog { "[ChangeDetect] Failed to load hot-paths cache: ${e.message}" }
-                        }
                     }
                     
                     traceDebug { "%%%%% $WAKELOCK_TAG acquire: $before→$after ${if (actuallyAcquired) "ACQUIRED" else "ref-count"}" }
@@ -632,13 +614,43 @@ class NeoApp : Application(), KoinStartup {
             }
         }
         
-        // Helper functions for hot-paths cache
-        fun getHotPath(key: String): String? = hotPathsCache[key]
+        // Lazy load hot-paths cache from preferences
+        private fun getHotPathsCache(): ConcurrentHashMap<String, String> {
+            return hotPathsCache ?: synchronized(this) {
+                hotPathsCache ?: run {
+                    try {
+                        val prefs = get<NeoPrefs>(NeoPrefs::class.java)
+                        val hotPathsJson = prefs.changeDetectionHotPaths.value
+                        val loadedMap = try {
+                            Json.decodeFromString<Map<String, String>>(hotPathsJson)
+                        } catch (e: Exception) {
+                            emptyMap()
+                        }
+                        val cache = ConcurrentHashMap<String, String>()
+                        cache.putAll(loadedMap)
+                        hotPathsCache = cache
+                        if (DETAILED_CHANGE_DETECT_LOG) debugLog { "[ChangeDetect] Hot-paths loaded: $hotPathsJson" }
+                        debugLog { "[ChangeDetect] Hot-paths cache loaded: ${cache.size} entries" }
+                        traceDebug { "[ChangeDetect] Hot-paths cache loaded: ${cache.size} entries" }
+                        cache
+                    } catch (e: Exception) {
+                        Timber.e(e, "[ChangeDetect] Failed to load hot-paths cache")
+                        debugLog { "[ChangeDetect] Failed to load hot-paths cache: ${e.message}" }
+                        val cache = ConcurrentHashMap<String, String>()
+                        hotPathsCache = cache
+                        cache
+                    }
+                }
+            }
+        }
         
-        fun getHotPathKeys(): Set<String> = hotPathsCache.keys.toSet()
+        // Helper functions for hot-paths cache
+        fun getHotPath(key: String): String? = getHotPathsCache()[key]
+        
+        fun getHotPathKeys(): Set<String> = getHotPathsCache().keys.toSet()
         
         fun updateHotPath(key: String, value: String) {
-            hotPathsCache[key] = value
+            getHotPathsCache()[key] = value
             if (wakeLockNested.get() == 0) {
                 Timber.w("[ChangeDetect] Hot-path updated OUTSIDE wakelock: key=$key")
                 debugLog { "[ChangeDetect] Hot-path updated OUTSIDE wakelock: key=$key" }
@@ -646,17 +658,22 @@ class NeoApp : Application(), KoinStartup {
         }
         
         fun removeHotPath(key: String) {
-            hotPathsCache.remove(key)
+            getHotPathsCache().remove(key)
         }
         
         suspend fun saveHotPathsCache() {
+            val cache = hotPathsCache
+            if (cache == null) {
+                debugLog { "[ChangeDetect] Hot-paths cache not loaded, skipping save" }
+                return
+            }
             try {
                 val prefs = get<NeoPrefs>(NeoPrefs::class.java)
-                val hotPathsJson = Json.encodeToString(hotPathsCache.toMap())
+                val hotPathsJson = Json.encodeToString(cache.toMap())
                 prefs.changeDetectionHotPaths.set(hotPathsJson)
                 if (DETAILED_CHANGE_DETECT_LOG) debugLog { "[ChangeDetect] Hot-paths saving: $hotPathsJson" }
-                debugLog { "[ChangeDetect] Hot-paths cache saved: ${hotPathsCache.size} entries" }
-                traceDebug { "[ChangeDetect] Hot-paths cache saved: ${hotPathsCache.size} entries" }
+                debugLog { "[ChangeDetect] Hot-paths cache saved: ${cache.size} entries" }
+                traceDebug { "[ChangeDetect] Hot-paths cache saved: ${cache.size} entries" }
             } catch (e: Exception) {
                 Timber.e(e, "[ChangeDetect] Failed to save hot-paths cache")
                 debugLog { "[ChangeDetect] Failed to save hot-paths cache: ${e.message}" }
