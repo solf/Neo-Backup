@@ -583,22 +583,26 @@ data class Package private constructor(val packageName: String) : KoinComponent 
                     
                     val hotPath = NeoApp.getHotPath("$packageName:$dirType")
                     if (hotPath != null) {
-                        // Phase 1: Check only the hot-path (depth 0, just the specific path)
+                        // Phase 1: Check only the hot-path using the same two-step check as PHASE-2
                         val hotFile = RootFile(dir, hotPath)
-                        val exists = hotFile.exists()
                         val fullPath = hotFile.absolutePath
-                        if (NeoApp.DETAILED_CHANGE_DETECT_LOG) debugLog { "[ChangeDetect] $packageName: PHASE-1 checking $dirType hotPath=$hotPath fullPath=$fullPath exists=$exists" }
-                        if (exists) {
-                            val hotTimestamp = hotFile.lastModified()
-                            if (hotTimestamp > lastBackupTimeMillis) {
-                                debugLog { "[ChangeDetect] $packageName: changes detected in $dirType at $hotPath (full: $fullPath) (timestamp=$hotTimestamp >= $lastBackupTimeMillis) (hot-path ✓ PHASE-1)" }
-                                Timber.d("[ChangeDetect] $packageName: changes detected in $dirType at $hotPath (full: $fullPath) (timestamp=$hotTimestamp >= $lastBackupTimeMillis) (hot-path ✓ PHASE-1)")
-                                
-                                // Update last changed type
-                                NeoApp.updateHotPath("$packageName:lastChangedType", dirType)
-                                
-                                return true
-                            }
+                        if (NeoApp.DETAILED_CHANGE_DETECT_LOG) debugLog { "[ChangeDetect] $packageName: PHASE-1 checking $dirType hotPath=$hotPath fullPath=$fullPath" }
+                        
+                        // Use the same two-step check as PHASE-2 (via ChangeDetectionUtils)
+                        val result = ChangeDetectionUtils.checkHotPath(
+                            rootDir = dir,
+                            hotPath = hotPath,
+                            thresholdTimestamp = lastBackupTimeMillis
+                        )
+                        
+                        if (result.hasChanges) {
+                            debugLog { "[ChangeDetect] $packageName: changes detected in $dirType at $hotPath (full: $fullPath) (timestamp=${result.foundTimestamp} >= $lastBackupTimeMillis) (hot-path ✓ PHASE-1)" }
+                            Timber.d("[ChangeDetect] $packageName: changes detected in $dirType at $hotPath (full: $fullPath) (timestamp=${result.foundTimestamp} >= $lastBackupTimeMillis) (hot-path ✓ PHASE-1)")
+                            
+                            // Update last changed type
+                            NeoApp.updateHotPath("$packageName:lastChangedType", dirType)
+                            
+                            return true
                         }
                     }
                 }

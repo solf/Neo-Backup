@@ -74,7 +74,7 @@ object ChangeDetectionUtils {
      * 
      * @return ChangeDetectionResult with hot-path as foundPath if change detected
      */
-    private fun checkHotPath(
+    fun checkHotPath(
         rootDir: java.io.File,
         hotPath: String,
         thresholdTimestamp: Long
