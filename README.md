@@ -1,3 +1,27 @@
+# Forked version: Changes from the original
+
+- BREAKING CHANGE (upgrade is fine, downgrade won't work): apk deduplication --
+no longer keeps multiple copies of the same unchanged apks, only makes new copy if changed
+- 'Only backup modified' option for scheduled backups -- works via scanning modification date
+in application data folders (up to a specified max depth + hot-path optimization)
+- Various significant bugfixes (stuck notifications, wakelocks not releasing)
+- debug log and schedule log (can be enabled in options) to trace what's exactly happening (via files)
+- NOTE: I barely know anything about Android apps / Kotlin -- so there's no guarantee
+that I did everything correctly; I am an experience Java Software Engineer though, I used Cursor
+and reviewed changes as much as I could
+- NOTE: I think this might be intended to be able to support remote file systems somehow,
+I have no idea how my changes will play with that (if that's supported); only tested locally
+
+# Installation
+
+You can install Neo version alongside the original one, it should work fine, but it will have
+completely separate settings (you'll have to re-configure everything).
+
+The release version is signed differently (by my signature), so it cannot be directly installed
+over the original version (Android doesn't allow it). You have to uninstall the original and 
+then to install my version. You can try to preserve settings by using some other backup/restore
+tool, e.g. TitaniumBackup or something (backup settings, uninstall, install mine, restore settings).
+
 <h1 align="center">
   <img src="fastlane/metadata/android/en-US/images/icon.png" alt="Neo Backup's icon" width="128" height="128"/>
   <br>

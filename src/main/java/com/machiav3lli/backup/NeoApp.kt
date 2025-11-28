@@ -560,7 +560,7 @@ class NeoApp : Application(), KoinStartup {
         @Volatile
         private var hotPathsCache: ConcurrentHashMap<String, String>? = null
         
-        const val DETAILED_CHANGE_DETECT_LOG = true
+        const val DETAILED_CHANGE_DETECT_LOG = false
 
         // count the nesting levels
         // might be difficult sometimes, because
