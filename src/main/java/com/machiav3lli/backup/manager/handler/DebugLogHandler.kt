@@ -77,4 +77,4 @@ inline fun debugLog(lazyMessage: () -> String) {
 }
 
 fun getCompactStackTrace(): String = Thread.currentThread().stackTrace
-    .drop(2).take(10).joinToString(" | ")
+    .drop(3).take(10).joinToString(" | ")

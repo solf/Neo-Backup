@@ -19,6 +19,7 @@ import androidx.work.OneTimeWorkRequest
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.OutOfQuotaPolicy
 import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
@@ -112,6 +113,50 @@ class ScheduleWork(
 
             debugLog { "ScheduleWork.doWork() ENTRY: scheduleId=$scheduleId, name='$name'" }
             debugLog { "ScheduleWork.doWork() call stack: ${getCompactStackTrace()}" }
+
+            // === PERSISTENT DEDUP CHECK (survives process restarts) ===
+            debugLog { "ScheduleWork.doWork() checking WorkManager for duplicate work: tag='schedule_$scheduleId'" }
+            val workManager = get<WorkManager>(WorkManager::class.java)
+            val existingWork = workManager.getWorkInfosByTag("schedule_$scheduleId").get()
+            debugLog { "ScheduleWork.doWork() WorkManager query returned ${existingWork.size} work items for schedule $scheduleId" }
+
+            val currentWorkId = this@ScheduleWork.id
+            val otherRunningWork = existingWork.filter { workInfo ->
+                workInfo.state == WorkInfo.State.RUNNING && workInfo.id != currentWorkId
+            }
+
+            if (otherRunningWork.isNotEmpty()) {
+                val otherIds = otherRunningWork.map { it.id }.joinToString(", ")
+                debugLog { "ScheduleWork.doWork() DUPLICATE DETECTED via WorkManager: scheduleId=$scheduleId has ${otherRunningWork.size} other RUNNING instances with ids=[$otherIds]" }
+                
+                val message = "[$scheduleId] duplicate schedule detected via WorkManager: $name (process restart, blocked)"
+                Timber.w(message)
+                
+                // Show persistent notification to alert user
+                showNotification(
+                    context,
+                    NeoActivity::class.java,
+                    generateUniqueNotificationId(),
+                    "⚠️ Duplicate Schedule Blocked",
+                    "Schedule '$name' - Another instance already running (process restart detected)",
+                    false  // autoCancel=false - stays until user dismisses
+                )
+                debugLog { "[NOTIF-CREATE] ScheduleWork.doWork() posted duplicate-blocked notification for scheduleId=$scheduleId" }
+                
+                if (pref_autoLogSuspicious.value) {
+                    textLog(
+                        listOf(
+                            message,
+                            "WorkManager showed ${otherRunningWork.size} other RUNNING instances: [$otherIds]",
+                            "--- autoLogSuspicious $scheduleId $name"
+                        ) + supportInfo()
+                    )
+                }
+                
+                return@withContext Result.failure()
+            }
+            debugLog { "ScheduleWork.doWork() WorkManager dedup check PASSED: no other RUNNING instances found for schedule $scheduleId" }
+            // === END PERSISTENT DEDUP CHECK ===
 
             if (USE_CENTRALIZED_FOREGROUND_INSTEAD_OF_LEGACY && pref_useForegroundInJob.value) {
                 debugLog { "[NOTIF-FOREGROUND] ScheduleWork.doWork() setting foreground for entire schedule: scheduleId=$scheduleId" }
