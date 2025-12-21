@@ -90,6 +90,9 @@ open class RestoreAppAction(context: Context, work: AppActionWork?, shell: Shell
         backup: Backup,
         backupMode: Int,
     ): ActionResult {
+        val startTime = System.currentTimeMillis()
+        var ok = false
+        debugLog { "restore:entry pkg=${app.packageName} mode=$backupMode" }
 
         fun handleException(e: Throwable): ActionResult {
             val message =
@@ -118,6 +121,7 @@ open class RestoreAppAction(context: Context, work: AppActionWork?, shell: Shell
                     //==================================================
                     restoreAll(work, app, backup, backupDir, backupMode)
                     //==================================================
+                    ok = true
 
                 } else return ActionResult(
                     app,
@@ -157,6 +161,9 @@ open class RestoreAppAction(context: Context, work: AppActionWork?, shell: Shell
         } catch (e: Throwable) {
             return handleException(e)
         } finally {
+            val duration = System.currentTimeMillis() - startTime
+            val result = if (ok) "success" else "fail"
+            debugLog { "restore:exit pkg=${app.packageName} result=$result duration=${duration}ms" }
             work?.setOperation("======>")
             Timber.i("$app: Restore done: $backup")
         }

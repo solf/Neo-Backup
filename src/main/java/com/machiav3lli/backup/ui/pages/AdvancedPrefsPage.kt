@@ -278,6 +278,13 @@ val pref_libsuTimeout = IntPref(
     defaultValue = 60
 )
 
+val pref_tarTimeout = IntPref(
+    key = "dev-adv.tarTimeout",
+    summary = "[minutes] timeout for tar/backup operations per app (0 = no timeout)",
+    entries = (listOf(0) + (5..30 step 5) + (40..120 step 10)).toList(),
+    defaultValue = 30
+)
+
 val pref_maxJobs = IntPref(
     key = "dev-adv.maxJobs",
     summary = "maximum number of jobs run concurrently (0 = default = numCores)[needs restart]",

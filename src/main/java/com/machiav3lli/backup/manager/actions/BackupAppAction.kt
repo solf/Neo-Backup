@@ -46,9 +46,13 @@ import com.machiav3lli.backup.manager.handler.ShellHandler.Companion.runAsRoot
 import com.machiav3lli.backup.manager.handler.ShellHandler.Companion.runAsRootPipeOutCollectErr
 import com.machiav3lli.backup.manager.handler.ShellHandler.Companion.utilBoxQ
 import com.machiav3lli.backup.manager.handler.ShellHandler.ShellCommandFailedException
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import com.machiav3lli.backup.manager.tasks.AppActionWork
 import com.machiav3lli.backup.ui.pages.pref_backupCache
 import com.machiav3lli.backup.ui.pages.pref_backupPauseApps
+import com.machiav3lli.backup.ui.pages.pref_tarTimeout
 import com.machiav3lli.backup.utils.ApkDeduplicationHelper
 import com.machiav3lli.backup.ui.pages.pref_backupTarCmd
 import com.machiav3lli.backup.ui.pages.pref_fakeBackupSeconds
@@ -86,9 +90,11 @@ open class BackupAppAction(context: Context, work: AppActionWork?, shell: ShellH
     BaseAppAction(context, work, shell) {
 
     open fun run(app: Package, backupMode: Int): ActionResult {
+        val startTime = System.currentTimeMillis()
         var backup: Backup? = null
         var ok = false
         val fakeSeconds = pref_fakeBackupSeconds.value
+        debugLog { "backup:entry pkg=${app.packageName} mode=$backupMode" }
 
         fun handleException(e: Throwable): ActionResult {
             val message =
@@ -150,63 +156,70 @@ open class BackupAppAction(context: Context, work: AppActionWork?, shell: ShellH
                 pauseApp(type = "backup", wh = When.pre, packageName = app.packageName)
 
             try {
-                fun doBackup(mode: Int, todo: () -> Unit) {
-                    if ((backupMode and mode) != 0) {
-                        Timber.i("$app: Backing up ${batchModes[mode]}")
-                        work?.setOperation(batchOperations[mode]!!)
-                        todo()
+                val timeoutMinutes = pref_tarTimeout.value.toLong()
+                val timeoutMs = if (timeoutMinutes > 0) timeoutMinutes * 60 * 1000 else Long.MAX_VALUE
+                
+                runBlocking {
+                    withTimeout(timeoutMs) {
+                        fun doBackup(mode: Int, todo: () -> Unit) {
+                            if ((backupMode and mode) != 0) {
+                                Timber.i("$app: Backing up ${batchModes[mode]}")
+                                work?.setOperation(batchOperations[mode]!!)
+                                todo()
+                            }
+                        }
+                        doBackup(MODE_APK) {
+                            backupPackage(app, backupInstanceDir, appBackupBaseDir, backupBuilder)
+                            backupBuilder.setHasApk(true)
+                        }
+                        doBackup(MODE_DATA) {
+                            backupBuilder.setHasAppData(
+                                backupData(app, backupInstanceDir, iv)
+                            )
+                        }
+                        doBackup(MODE_DATA_DE) {
+                            backupBuilder.setHasDevicesProtectedData(
+                                backupDeviceProtectedData(app, backupInstanceDir, iv)
+                            )
+                        }
+                        doBackup(MODE_DATA_EXT) {
+                            backupBuilder.setHasExternalData(
+                                backupExternalData(app, backupInstanceDir, iv)
+                            )
+                        }
+                        doBackup(MODE_DATA_OBB) {
+                            backupBuilder.setHasObbData(
+                                backupObbData(app, backupInstanceDir, iv)
+                            )
+                        }
+                        doBackup(MODE_DATA_MEDIA) {
+                            backupBuilder.setHasMediaData(
+                                backupMediaData(app, backupInstanceDir, iv)
+                            )
+                        }
+                        if (isCompressionEnabled()) {
+                            Timber.i("$app: Compressing backup using ${getCompressionType()}")
+                            backupBuilder.setCompressionType(getCompressionType())
+                        }
+                        when {
+                            isPasswordEncryptionEnabled() ->
+                                backupBuilder.setCipherType(CIPHER_ALGORITHM)
+
+                            isPGPEncryptionEnabled()      ->
+                                backupBuilder.setCipherType(SymmetricKeyAlgorithm.AES_256.name)
+                        }
+                        StorageFile.invalidateCache(backupInstanceDir)
+                        val dataSize = backupInstanceDir.listFiles().sumOf { it.size }
+                        val copiedApkSize = backupBuilder.getCopiedApkSize()
+                        val backupSize = dataSize + copiedApkSize
+                        backupBuilder.setSize(backupSize)
+                        debugLog { "[BackupSize] <${app.packageName}>: data=${dataSize / 1024}KB, copiedApk=${copiedApkSize / 1024}KB, total=${backupSize / 1024}KB" }
+
+                        backup = backupBuilder.createBackup()
+
+                        ok = backup?.file != null
                     }
                 }
-                doBackup(MODE_APK) {
-                    backupPackage(app, backupInstanceDir, appBackupBaseDir, backupBuilder)
-                    backupBuilder.setHasApk(true)
-                }
-                doBackup(MODE_DATA) {
-                    backupBuilder.setHasAppData(
-                        backupData(app, backupInstanceDir, iv)
-                    )
-                }
-                doBackup(MODE_DATA_DE) {
-                    backupBuilder.setHasDevicesProtectedData(
-                        backupDeviceProtectedData(app, backupInstanceDir, iv)
-                    )
-                }
-                doBackup(MODE_DATA_EXT) {
-                    backupBuilder.setHasExternalData(
-                        backupExternalData(app, backupInstanceDir, iv)
-                    )
-                }
-                doBackup(MODE_DATA_OBB) {
-                    backupBuilder.setHasObbData(
-                        backupObbData(app, backupInstanceDir, iv)
-                    )
-                }
-                doBackup(MODE_DATA_MEDIA) {
-                    backupBuilder.setHasMediaData(
-                        backupMediaData(app, backupInstanceDir, iv)
-                    )
-                }
-                if (isCompressionEnabled()) {
-                    Timber.i("$app: Compressing backup using ${getCompressionType()}")
-                    backupBuilder.setCompressionType(getCompressionType())
-                }
-                when {
-                    isPasswordEncryptionEnabled() ->
-                        backupBuilder.setCipherType(CIPHER_ALGORITHM)
-
-                    isPGPEncryptionEnabled()      ->
-                        backupBuilder.setCipherType(SymmetricKeyAlgorithm.AES_256.name)
-                }
-                StorageFile.invalidateCache(backupInstanceDir)
-                val dataSize = backupInstanceDir.listFiles().sumOf { it.size }
-                val copiedApkSize = backupBuilder.getCopiedApkSize()
-                val backupSize = dataSize + copiedApkSize
-                backupBuilder.setSize(backupSize)
-                debugLog { "[BackupSize] <${app.packageName}>: data=${dataSize / 1024}KB, copiedApk=${copiedApkSize / 1024}KB, total=${backupSize / 1024}KB" }
-
-                backup = backupBuilder.createBackup()
-
-                ok = backup.file != null
 
             } catch (e: BackupFailedException) {
                 return handleException(e)
@@ -214,6 +227,10 @@ open class BackupAppAction(context: Context, work: AppActionWork?, shell: ShellH
                 return handleException(e)
             } catch (e: IOException) {
                 return handleException(e)
+            } catch (e: TimeoutCancellationException) {
+                val duration = System.currentTimeMillis() - startTime
+                debugLog { "backup:timeout pkg=${app.packageName} duration=${duration}ms" }
+                return handleException(BackupFailedException("Backup timeout after ${duration}ms", e))
             } finally {
                 work?.setOperation("======")
                 if (pauseApp)
@@ -231,6 +248,9 @@ open class BackupAppAction(context: Context, work: AppActionWork?, shell: ShellH
         } catch (e: Throwable) {
             return handleException(e)
         } finally {
+            val duration = System.currentTimeMillis() - startTime
+            val result = if (ok) "success" else "fail"
+            debugLog { "backup:exit pkg=${app.packageName} result=$result duration=${duration}ms" }
             work?.setOperation("======>")
             Timber.i("${app.packageName}: Backup done: ${backup}")
         }

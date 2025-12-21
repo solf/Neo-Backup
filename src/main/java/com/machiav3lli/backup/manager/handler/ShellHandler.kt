@@ -33,6 +33,7 @@ import com.machiav3lli.backup.ui.pages.baseInfo
 import com.machiav3lli.backup.ui.pages.pref_libsuTimeout
 import com.machiav3lli.backup.ui.pages.pref_libsuUseRootShell
 import com.machiav3lli.backup.ui.pages.pref_suCommand
+import com.machiav3lli.backup.ui.pages.pref_tarTimeout
 import com.machiav3lli.backup.utils.BUFFER_SIZE
 import com.machiav3lli.backup.utils.FileUtils.translatePosixPermissionToMode
 import com.machiav3lli.backup.utils.extensions.Android
@@ -41,9 +42,11 @@ import com.topjohnwu.superuser.ShellUtils
 import com.topjohnwu.superuser.io.SuRandomAccessFile
 import de.voize.semver4k.Semver
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.junit.Test
 import timber.log.Timber
 import java.io.File
@@ -960,10 +963,13 @@ class ShellHandler {
             command: String,
         ): Pair<Int, String> {
             Timber.i("SHELL: $command")
+            val startTime = System.currentTimeMillis()
 
             return runBlocking(Dispatchers.IO) {
 
                 runCatching {
+                    val timeoutMinutes = pref_tarTimeout.value.toLong()
+                    val timeoutMs = if (timeoutMinutes > 0) timeoutMinutes * 60 * 1000 else Long.MAX_VALUE
 
                     val process = Runtime.getRuntime().exec(splitCommand(suCommand).toTypedArray())
 
@@ -977,8 +983,17 @@ class ShellHandler {
 
                     shellIn.write("$command\n".encodeToByteArray())
 
-                    inStream.copyTo(shellIn, 65536)
-                    shellIn.close()
+                    try {
+                        withTimeout(timeoutMs) {
+                            inStream.copyTo(shellIn, 65536)
+                            shellIn.close()
+                        }
+                    } catch (e: TimeoutCancellationException) {
+                        val duration = System.currentTimeMillis() - startTime
+                        debugLog { "shell:timeout cmd=${command.take(100)} duration=${duration}ms" }
+                        process.destroyForcibly()
+                        throw e
+                    }
 
                     val err = errAsync.await()
                     withContext(Dispatchers.IO) { process.waitFor(10, TimeUnit.SECONDS) }
@@ -991,6 +1006,10 @@ class ShellHandler {
 
                     (code to err)
                 }.getOrElse {
+                    val duration = System.currentTimeMillis() - startTime
+                    if (it is TimeoutCancellationException) {
+                        debugLog { "shell:timeout-caught cmd=${command.take(100)} duration=${duration}ms" }
+                    }
                     (-1 to (it.message ?: "unknown error"))
                 }
             }
@@ -1001,10 +1020,13 @@ class ShellHandler {
             command: String,
         ): Pair<Int, String> {
             Timber.i("SHELL: $command")
+            val startTime = System.currentTimeMillis()
 
             return runBlocking(Dispatchers.IO) {
 
                 runCatching {
+                    val timeoutMinutes = pref_tarTimeout.value.toLong()
+                    val timeoutMs = if (timeoutMinutes > 0) timeoutMinutes * 60 * 1000 else Long.MAX_VALUE
 
                     val process = Runtime.getRuntime().exec(splitCommand(suCommand).toTypedArray())
 
@@ -1019,8 +1041,17 @@ class ShellHandler {
                     shellIn.write(command.encodeToByteArray())
                     shellIn.close()
 
-                    shellOut.copyTo(outStream, 65536)
-                    outStream.flush()
+                    try {
+                        withTimeout(timeoutMs) {
+                            shellOut.copyTo(outStream, 65536)
+                            outStream.flush()
+                        }
+                    } catch (e: TimeoutCancellationException) {
+                        val duration = System.currentTimeMillis() - startTime
+                        debugLog { "shell:timeout cmd=${command.take(100)} duration=${duration}ms" }
+                        process.destroyForcibly()
+                        throw e
+                    }
 
                     val err = errAsync.await()
                     withContext(Dispatchers.IO) {
@@ -1034,6 +1065,10 @@ class ShellHandler {
 
                     (code to err)
                 }.getOrElse {
+                    val duration = System.currentTimeMillis() - startTime
+                    if (it is TimeoutCancellationException) {
+                        debugLog { "shell:timeout-caught cmd=${command.take(100)} duration=${duration}ms" }
+                    }
                     (-1 to (it.message ?: "unknown error"))
                 }
             }
