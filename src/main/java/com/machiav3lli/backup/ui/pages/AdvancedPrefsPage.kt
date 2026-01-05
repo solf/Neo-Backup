@@ -50,6 +50,7 @@ import com.machiav3lli.backup.ui.compose.icons.Phosphor
 import com.machiav3lli.backup.ui.compose.icons.phosphor.AndroidLogo
 import com.machiav3lli.backup.ui.compose.icons.phosphor.AsteriskSimple
 import com.machiav3lli.backup.ui.compose.icons.phosphor.ClockCounterClockwise
+import com.machiav3lli.backup.ui.compose.icons.phosphor.EyeSlash
 import com.machiav3lli.backup.ui.compose.icons.phosphor.Hash
 import com.machiav3lli.backup.ui.compose.icons.phosphor.ShieldStar
 import com.machiav3lli.backup.ui.compose.icons.phosphor.Warning
@@ -666,6 +667,14 @@ val pref_changeDetectionScanDepth = IntPref(
     summary = "Maximum directory depth for change detection scanning (higher = more accurate but slower)",
     entries = (1..10).toList(),
     defaultValue = 3
+)
+
+val pref_createNoMedia = BooleanPref(
+    key = "adv.createNoMedia",
+    titleId = R.string.prefs_createnomedia,
+    summaryId = R.string.prefs_createnomedia_summary,
+    icon = Phosphor.EyeSlash,
+    defaultValue = true
 )
 
 

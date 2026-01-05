@@ -69,6 +69,7 @@ import com.machiav3lli.backup.ui.pages.pref_prettyJson
 import com.machiav3lli.backup.ui.pages.pref_useYamlPreferences
 import com.machiav3lli.backup.ui.pages.pref_useYamlProperties
 import com.machiav3lli.backup.ui.pages.pref_useYamlSchedules
+import com.machiav3lli.backup.utils.FileUtils
 import com.machiav3lli.backup.utils.FileUtils.BackupLocationInAccessibleException
 import com.machiav3lli.backup.utils.ISO_DATE_TIME_FORMAT_MS
 import com.machiav3lli.backup.utils.StorageLocationNotConfiguredException
@@ -515,6 +516,8 @@ class NeoApp : Application(), KoinStartup {
                     Timber.e("backup storage location found at ${storageDir.path}")
                     field = storageDir
                 }
+                // Ensure .nomedia file exists (self-healing)
+                FileUtils.ensureNoMedia(field)
                 return field
             }
 

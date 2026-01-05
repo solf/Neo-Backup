@@ -21,9 +21,13 @@ import android.content.Context
 import com.machiav3lli.backup.NeoApp
 import com.machiav3lli.backup.data.dbs.entity.SpecialInfo
 import com.machiav3lli.backup.data.entity.Package
+import com.machiav3lli.backup.data.entity.StorageFile
 import com.machiav3lli.backup.manager.handler.LogsHandler
+import com.machiav3lli.backup.manager.handler.debugLog
 import com.machiav3lli.backup.manager.handler.findBackups
 import com.machiav3lli.backup.manager.handler.updateAppTables
+import com.machiav3lli.backup.ui.pages.pref_createNoMedia
+import timber.log.Timber
 import java.io.File
 import java.nio.file.attribute.PosixFilePermission
 import java.nio.file.attribute.PosixFilePermissions
@@ -85,6 +89,50 @@ object FileUtils {
             NeoApp.context.updateAppTables()
         } catch (e: Throwable) {
             LogsHandler.logException(e, backTrace = true)
+        }
+    }
+
+    /**
+     * Ensures a .nomedia file exists in the given directory to prevent Android MediaScanner
+     * from indexing backup files. This helps save battery/CPU and keeps media galleries clean.
+     * 
+     * The .nomedia file is automatically created if missing (self-healing) based on the
+     * user preference setting.
+     * 
+     * @param directory The directory where .nomedia should exist, typically the backup root
+     */
+    fun ensureNoMedia(directory: StorageFile?) {
+        try {
+            // Check preference - return early if disabled
+            if (!pref_createNoMedia.value) {
+                return
+            }
+
+            // Null check
+            if (directory == null) {
+                return
+            }
+
+            // Check if .nomedia already exists
+            val noMediaFile = directory.findFile(".nomedia")
+            if (noMediaFile != null && noMediaFile.exists()) {
+                // Already exists, nothing to do
+                return
+            }
+
+            // Create the .nomedia file
+            val created = directory.createFile(".nomedia")
+            if (created != null && created.exists()) {
+                Timber.i("Created .nomedia file in backup directory: ${directory.path}")
+                debugLog { "[.nomedia] Created .nomedia file in: ${directory.path}" }
+            } else {
+                Timber.w("Failed to create .nomedia file in backup directory: ${directory.path}")
+                debugLog { "[.nomedia] FAILED to create .nomedia file in: ${directory.path}" }
+            }
+        } catch (e: Throwable) {
+            // Don't fail backup operations if .nomedia creation fails
+            Timber.w(e, "Error while ensuring .nomedia file exists")
+            debugLog { "[.nomedia] ERROR while ensuring .nomedia file: ${e.message}" }
         }
     }
 
