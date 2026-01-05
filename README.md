@@ -5,6 +5,7 @@ no longer keeps multiple copies of the same unchanged apks, only makes new copy 
 - 'Only backup modified' option for scheduled backups -- works via scanning modification date
 in application data folders (up to a specified max depth + hot-path optimization)
 - Various significant bugfixes (stuck notifications, wakelocks not releasing)
+- Changed default settings for schedules to 'actually work' (use foregrounding when executing a schedule)
 - debug log and schedule log (can be enabled in options) to trace what's exactly happening (via files)
 - NOTE: I barely know anything about Android apps / Kotlin -- so there's no guarantee
 that I did everything correctly; I am an experience Java Software Engineer though, I used Cursor
