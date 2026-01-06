@@ -31,11 +31,18 @@ import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
@@ -62,6 +69,7 @@ import com.machiav3lli.backup.DialogMode
 import com.machiav3lli.backup.R
 import com.machiav3lli.backup.data.entity.Permission
 import com.machiav3lli.backup.ui.activities.NeoActivity
+import com.machiav3lli.backup.ui.compose.DirectoryPickerDialog
 import com.machiav3lli.backup.ui.compose.blockBorderBottom
 import com.machiav3lli.backup.ui.compose.component.PermissionItem
 import com.machiav3lli.backup.ui.compose.component.TopBar
@@ -80,6 +88,7 @@ import com.machiav3lli.backup.utils.requireContactsPermission
 import com.machiav3lli.backup.utils.requireSMSMMSPermission
 import com.machiav3lli.backup.utils.requireStorageLocation
 import com.machiav3lli.backup.utils.setBackupDir
+import com.machiav3lli.backup.utils.setBackupDirFromPath
 import com.machiav3lli.backup.utils.specialBackupsEnabled
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -97,6 +106,7 @@ fun PermissionsPage(powerManager: PowerManager = koinInject()) {
     val dialogProp: MutableState<DialogMode> = remember {
         mutableStateOf(DialogMode.NONE)
     }
+    val showDirectoryPicker = remember { mutableStateOf(false) }
 
     val permissionsList = remember {
         mutableStateMapOf<Permission, () -> Unit>()
@@ -176,10 +186,7 @@ fun PermissionsPage(powerManager: PowerManager = koinInject()) {
 
                     if (!context.isStorageDirSetAndOk && none { it.key == Permission.StorageLocation })
                         set(Permission.StorageLocation) {
-                            requireStorageLocation(askForDirectory) {
-                                dialogProp.value = DialogMode.NO_SAF
-                                openDialog.value = true
-                            }
+                            // This onClick is not used as we have custom UI with two buttons
                         }
 
                     if (!context.checkBatteryOptimization(powerManager)
@@ -270,15 +277,43 @@ fun PermissionsPage(powerManager: PowerManager = koinInject()) {
             contentPadding = PaddingValues(8.dp)
         ) {
             items(permissionsList.toList(), key = { it.first.nameId }) { (permission, onClick) ->
-                PermissionItem(
-                    item = permission,
-                    modifier = Modifier.animateItem(),
-                    onClick = onClick
-                )
+                if (permission == Permission.StorageLocation) {
+                    // Custom UI with two buttons for storage location
+                    StorageLocationPermissionItem(
+                        modifier = Modifier.animateItem(),
+                        onSAFPickerClick = {
+                            requireStorageLocation(askForDirectory) {
+                                dialogProp.value = DialogMode.NO_SAF
+                                openDialog.value = true
+                            }
+                        },
+                        onBrowseClick = {
+                            showDirectoryPicker.value = true
+                        }
+                    )
+                } else {
+                    PermissionItem(
+                        item = permission,
+                        modifier = Modifier.animateItem(),
+                        onClick = onClick
+                    )
+                }
             }
         }
     }
 
+    // Custom directory picker
+    if (showDirectoryPicker.value) {
+        DirectoryPickerDialog(
+            onDismiss = { showDirectoryPicker.value = false },
+            onDirectorySelected = { selectedDir ->
+                Timber.i("Selected directory: ${selectedDir.absolutePath}")
+                setBackupDirFromPath(selectedDir.absolutePath)
+                showDirectoryPicker.value = false
+            }
+        )
+    }
+    
     if (openDialog.value) BaseDialog(onDismiss = { openDialog.value = false }) {
         dialogProp.value.let { dialogMode ->
             when (dialogMode) {
@@ -363,6 +398,70 @@ fun PermissionsPage(powerManager: PowerManager = koinInject()) {
                 )
 
                 else -> {}
+            }
+        }
+    }
+}
+
+@Composable
+private fun StorageLocationPermissionItem(
+    modifier: Modifier = Modifier,
+    onSAFPickerClick: () -> Unit,
+    onBrowseClick: () -> Unit
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerHighest
+        ),
+        shape = androidx.compose.material3.MaterialTheme.shapes.large
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+            ) {
+                androidx.compose.material3.Icon(
+                    imageVector = com.machiav3lli.backup.data.entity.Permission.StorageLocation.icon,
+                    contentDescription = null
+                )
+                androidx.compose.material3.Text(
+                    text = androidx.compose.ui.res.stringResource(
+                        id = com.machiav3lli.backup.data.entity.Permission.StorageLocation.nameId
+                    ),
+                    style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
+                )
+            }
+            
+            androidx.compose.material3.Text(
+                text = androidx.compose.ui.res.stringResource(
+                    id = com.machiav3lli.backup.data.entity.Permission.StorageLocation.descriptionId
+                ),
+                style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+            )
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onSAFPickerClick,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    androidx.compose.material3.Text("SAF Picker")
+                }
+                Button(
+                    onClick = onBrowseClick,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    androidx.compose.material3.Text("Browse Files")
+                }
             }
         }
     }

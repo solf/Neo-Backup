@@ -171,6 +171,11 @@ fun setBackupDir(uri: Uri): String {
     return fullUriString
 }
 
+fun setBackupDirFromPath(path: String): String {
+    val uri = Uri.parse("direct://$path")
+    return setBackupDir(uri)
+}
+
 val Context.canReadExternalStorage: Boolean
     get() {
         val externalStorage = FileUtils.getExternalStorageDirectory(this)
