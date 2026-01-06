@@ -185,12 +185,9 @@ open class StorageFile {
     private var _uri: Uri? = null
     val uri: Uri?
         get() = _uri ?: file?.let { f ->
-            parent?.let { p ->
-                name?.let { n ->
-                    _uri = p.findUri(n)
-                    _uri
-                }
-            } ?: context.uriFromFile(f)
+            // For direct file access, use FileProvider URI - don't query SAF
+            _uri = context.uriFromFile(f)
+            _uri
         }
 
     data class DocumentInfo(
