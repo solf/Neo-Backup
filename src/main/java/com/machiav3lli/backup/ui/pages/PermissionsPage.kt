@@ -36,7 +36,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.MutableState
@@ -51,6 +54,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.machiav3lli.backup.ui.compose.icons.Phosphor
+import com.machiav3lli.backup.ui.compose.icons.phosphor.ArrowRight
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.machiav3lli.backup.DialogMode
@@ -237,6 +242,24 @@ fun PermissionsPage(powerManager: PowerManager = koinInject()) {
         topBar = {
             TopBar(title = stringResource(id = R.string.app_name)) {}
         },
+        floatingActionButton = {
+            // Show "Skip" button if Storage Location is the only remaining permission
+            if (permissionsList.any { it.key == Permission.StorageLocation }) {
+                ExtendedFloatingActionButton(
+                    text = { Text("Skip for now") },
+                    icon = { Icon(Phosphor.ArrowRight, contentDescription = null) },
+                    onClick = {
+                        // Remove Storage Location requirement to allow proceeding
+                        permissionsList.remove(Permission.StorageLocation)
+                        if (permissionsList.isEmpty()) {
+                            mScope.launch {
+                                mainActivity.moveTo(NavItem.Main.destination)
+                            }
+                        }
+                    }
+                )
+            }
+        }
     ) { paddingValues ->
         LazyColumn(
             modifier = Modifier

@@ -500,24 +500,57 @@ class NeoApp : Application(), KoinStartup {
 
         //------------------------------------------------------------------------------------------ backupRoot
 
+        private var backupRootAccessFailed = false  // Track if we already tried and failed
+
         var backupRoot: StorageFile? = null
-            get() {
-                if (field == null) {
-                    val storagePath = backupDirConfigured
-                    if (storagePath.isEmpty()) {
-                        Timber.e("backup storage location not configured")
-                        throw StorageLocationNotConfiguredException()
-                    }
-                    val storageDir = StorageFile.fromUri(storagePath)
-                    if (!storageDir.exists()) { //TODO hg42 for now only existing directories allowed
-                        Timber.e("backup storage location not accessible: $storagePath")
-                        throw BackupLocationInAccessibleException("Cannot access the root location '$storagePath'")
-                    }
-                    Timber.e("backup storage location found at ${storageDir.path}")
-                    field = storageDir
+            set(value) {
+                field = value
+                // Reset failure flag when explicitly setting backupRoot (e.g., invalidating cache)
+                if (value == null) {
+                    backupRootAccessFailed = false
                 }
-                // Ensure .nomedia file exists (self-healing)
-                FileUtils.ensureNoMedia(field)
+            }
+            get() {
+                // Only try once - if we failed before, don't retry endlessly
+                if (field == null && !backupRootAccessFailed) {
+                    try {
+                        val storagePath = backupDirConfigured
+                        if (storagePath.isEmpty()) {
+                            Timber.e("backup storage location not configured")
+                            backupRootAccessFailed = true
+                            return null
+                        }
+                        val storageDir = StorageFile.fromUri(storagePath)
+                        if (!storageDir.exists()) {
+                            Timber.e("backup storage location not accessible: $storagePath")
+                            backupRootAccessFailed = true
+                            return null
+                        }
+                        Timber.i("backup storage location found at ${storageDir.path}")
+                        field = storageDir
+                    } catch (e: StorageLocationNotConfiguredException) {
+                        Timber.e(e, "Storage location not configured")
+                        backupRootAccessFailed = true
+                        return null
+                    } catch (e: BackupLocationInAccessibleException) {
+                        Timber.e(e, "Backup location inaccessible")
+                        backupRootAccessFailed = true
+                        return null
+                    } catch (e: Throwable) {
+                        Timber.e(e, "Failed to access backup storage")
+                        backupRootAccessFailed = true
+                        return null
+                    }
+                }
+                // Ensure .nomedia file exists (self-healing) - but don't crash if it fails
+                if (field != null) {
+                    try {
+                        FileUtils.ensureNoMedia(field)
+                    } catch (e: Throwable) {
+                        Timber.w(e, "Failed to create .nomedia file")
+                        // Continue anyway - this is not critical
+                    }
+                }
                 return field
             }
 
