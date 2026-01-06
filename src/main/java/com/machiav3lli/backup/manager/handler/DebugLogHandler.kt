@@ -54,9 +54,10 @@ class DebugLogHandler {
                     val thread = Thread.currentThread()
                     val threadInfo = "Thread:${thread.name}/${thread.id}"
                     val line = "[$timestamp] [$threadInfo] $message\n"
-                    
-                    if (pref_debugLogToInternalStorage.value) {
-                        // Plain Java I/O for internal storage - guaranteed to work
+
+                    // Use internal storage if: preference set OR backupRoot not initialized yet
+                    if (pref_debugLogToInternalStorage.value || !NeoApp.isBackupRootInitialized) {
+                        // Write to internal storage
                         NeoApp.context.filesDir?.let { filesDir ->
                             val logFile = java.io.File(filesDir, DEBUG_LOG_FILENAME)
                             java.io.FileWriter(logFile, true).use { writer ->
@@ -64,9 +65,17 @@ class DebugLogHandler {
                             }
                         }
                     } else {
-                        // StorageFile for backup root
-                        val logFile = getDebugLogFile() ?: return
-                        logFile.appendText(line)
+                        // Write to backup directory (backupRoot is initialized)
+                        NeoApp.backupRoot?.file?.let { rootFile ->
+                            val logFile = java.io.File(rootFile, DEBUG_LOG_FILENAME)
+                            java.io.FileWriter(logFile, true).use { writer ->
+                                writer.write(line)
+                            }
+                        } ?: run {
+                            // Pure SAF fallback
+                            val logFile = getDebugLogFile() ?: return
+                            logFile.appendText(line)
+                        }
                     }
                 } catch (e: Exception) {
                     Timber.e("Failed to write debug log: $e")

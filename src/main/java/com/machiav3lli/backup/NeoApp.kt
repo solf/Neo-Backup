@@ -501,13 +501,17 @@ class NeoApp : Application(), KoinStartup {
         //------------------------------------------------------------------------------------------ backupRoot
 
         private var backupRootAccessFailed = false  // Track if we already tried and failed
+        @Volatile var isBackupRootInitialized = false  // Track if backupRoot is ready to use
 
         var backupRoot: StorageFile? = null
             set(value) {
                 field = value
-                // Reset failure flag when explicitly setting backupRoot (e.g., invalidating cache)
+                // Reset flags when explicitly setting backupRoot (e.g., invalidating cache)
                 if (value == null) {
                     backupRootAccessFailed = false
+                    isBackupRootInitialized = false
+                } else {
+                    isBackupRootInitialized = true
                 }
             }
             get() {
@@ -528,6 +532,7 @@ class NeoApp : Application(), KoinStartup {
                         }
                         Timber.i("backup storage location found at ${storageDir.path}")
                         field = storageDir
+                        isBackupRootInitialized = true
                     } catch (e: StorageLocationNotConfiguredException) {
                         Timber.e(e, "Storage location not configured")
                         backupRootAccessFailed = true

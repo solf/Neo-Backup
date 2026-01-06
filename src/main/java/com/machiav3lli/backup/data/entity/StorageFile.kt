@@ -181,7 +181,8 @@ open class StorageFile {
     val context: Context
         get() = NeoApp.context            // ensure, the context is always the same for all objects and lives all the time
 
-    private var file: File? = null
+    var file: File? = null
+        private set
     private var _uri: Uri? = null
     val uri: Uri?
         get() = _uri ?: file?.let { f ->
