@@ -181,7 +181,7 @@ open class StorageFile {
     val context: Context
         get() = NeoApp.context            // ensure, the context is always the same for all objects and lives all the time
 
-    private var file: RootFile? = null
+    private var file: File? = null
     private var _uri: Uri? = null
     val uri: Uri?
         get() = _uri ?: file?.let { f ->
@@ -219,10 +219,10 @@ open class StorageFile {
     }
 
     constructor(file: File) {
-        this.file = RootFile(file)
+        this.file = file
     }
 
-    constructor(parent: StorageFile, file: RootFile) {
+    constructor(parent: StorageFile, file: File) {
         this.parent = parent
         this.file = file
     }
@@ -234,7 +234,7 @@ open class StorageFile {
 
     constructor(parentFile: File, subPath: String) {
         this.parent = StorageFile(parentFile)
-        this.file = RootFile(parentFile, subPath)
+        this.file = File(parentFile, subPath)
     }
 
     //constructor(parent: StorageFile, subPath: String) {
@@ -326,7 +326,7 @@ open class StorageFile {
                         val regularFile = java.io.File(path)
                         debugLog { "Direct file check: exists=${regularFile.exists()} canRead=${regularFile.canRead()} canWrite=${regularFile.canWrite()}" }
                         if (regularFile.exists() && regularFile.canRead() && regularFile.canWrite()) {
-                            file = RootFile(regularFile)
+                            file = regularFile
                             Timber.i("Using direct file access (MANAGE_EXTERNAL_STORAGE): $path")
                             debugLog { "Direct file access SUCCESS: $path" }
                             cacheSetUri(uri.toString(), this)
