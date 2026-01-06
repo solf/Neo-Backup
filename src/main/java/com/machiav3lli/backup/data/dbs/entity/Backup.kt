@@ -35,6 +35,7 @@ import com.machiav3lli.backup.NeoApp
 import com.machiav3lli.backup.PROP_NAME
 import com.machiav3lli.backup.data.entity.StorageFile
 import com.machiav3lli.backup.manager.handler.LogsHandler.Companion.logException
+import com.machiav3lli.backup.manager.handler.debugLog
 import com.machiav3lli.backup.manager.handler.regexPackageFolder
 import com.machiav3lli.backup.ui.pages.pref_createInvalidBackups
 import com.machiav3lli.backup.utils.LocalDateTimeSerializer
@@ -324,10 +325,13 @@ data class Backup @OptIn(kotlinx.serialization.ExperimentalSerializationApi::cla
                 return backup
 
             } catch (e: FileNotFoundException) {
+                debugLog { "Backup.createFrom FileNotFoundException: ${propertiesFile.path}" }
                 logException(e, "Cannot open ${propertiesFile.path}", backTrace = false)
             } catch (e: IOException) {
+                debugLog { "Backup.createFrom IOException: ${propertiesFile.path}" }
                 logException(e, "Cannot read ${propertiesFile.path}", backTrace = false)
             } catch (e: Throwable) {
+                debugLog { "Backup.createFrom deserialization failed: ${e.javaClass.simpleName}: ${e.message}\nFile: ${propertiesFile.path}\nFile exists: ${propertiesFile.exists()}\nFile size: ${propertiesFile.size}\nContent length: ${serialized.length}\nFirst 200 chars: ${serialized.take(200)}" }
                 logException(e, "file: ${propertiesFile.path} =\n$serialized", backTrace = false)
             }
             return null

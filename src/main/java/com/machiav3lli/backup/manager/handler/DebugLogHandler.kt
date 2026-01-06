@@ -20,6 +20,7 @@ package com.machiav3lli.backup.manager.handler
 import com.machiav3lli.backup.NeoApp
 import com.machiav3lli.backup.data.entity.StorageFile
 import com.machiav3lli.backup.data.preferences.pref_debugLog
+import com.machiav3lli.backup.data.preferences.pref_debugLogToInternalStorage
 import timber.log.Timber
 import java.nio.charset.StandardCharsets
 import java.time.LocalDateTime
@@ -31,40 +32,55 @@ class DebugLogHandler {
         private val logLock = Any()
         private val timestampFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS")
 
-        private fun getDebugLogFile(): StorageFile? {
-            return NeoApp.backupRoot?.let { backupRoot ->
-                try {
+        fun getDebugLogFile(): StorageFile? {
+            return if (pref_debugLogToInternalStorage.value) {
+                // Internal storage - for UI access (share/clear)
+                NeoApp.context.filesDir?.let { filesDir ->
+                    StorageFile(java.io.File(filesDir, DEBUG_LOG_FILENAME))
+                }
+            } else {
+                // Backup root
+                NeoApp.backupRoot?.let { backupRoot ->
                     backupRoot.findFile(DEBUG_LOG_FILENAME)
                         ?: backupRoot.createFile(DEBUG_LOG_FILENAME)
-                } catch (e: Exception) {
-                    Timber.e("Failed to get debug log file: $e")
-                    null
                 }
             }
         }
 
         fun writeDebug(message: String) {
-            val logFile = getDebugLogFile() ?: return
-            try {
-                val timestamp = LocalDateTime.now().format(timestampFormatter)
-                val thread = Thread.currentThread()
-                val threadInfo = "Thread:${thread.name}/${thread.id}"
-                val line = "[$timestamp] [$threadInfo] $message\n"
-                logFile.appendText(line)
-            } catch (e: Exception) {
-                Timber.e("Failed to write debug log: $e")
+            synchronized(logLock) {
+                try {
+                    val timestamp = LocalDateTime.now().format(timestampFormatter)
+                    val thread = Thread.currentThread()
+                    val threadInfo = "Thread:${thread.name}/${thread.id}"
+                    val line = "[$timestamp] [$threadInfo] $message\n"
+                    
+                    if (pref_debugLogToInternalStorage.value) {
+                        // Plain Java I/O for internal storage - guaranteed to work
+                        NeoApp.context.filesDir?.let { filesDir ->
+                            val logFile = java.io.File(filesDir, DEBUG_LOG_FILENAME)
+                            java.io.FileWriter(logFile, true).use { writer ->
+                                writer.write(line)
+                            }
+                        }
+                    } else {
+                        // StorageFile for backup root
+                        val logFile = getDebugLogFile() ?: return
+                        logFile.appendText(line)
+                    }
+                } catch (e: Exception) {
+                    Timber.e("Failed to write debug log: $e")
+                }
             }
         }
 
         private fun StorageFile.appendText(text: String) {
-            synchronized(logLock) {
-                try {
-                    appendOutputStream()?.use { out ->
-                        out.write(text.toByteArray(StandardCharsets.UTF_8))
-                    }
-                } catch (e: Exception) {
-                    Timber.e("Failed to append to debug log: $e")
+            try {
+                appendOutputStream()?.use { out ->
+                    out.write(text.toByteArray(StandardCharsets.UTF_8))
                 }
+            } catch (e: Exception) {
+                Timber.e("Failed to append to debug log: $e")
             }
         }
     }

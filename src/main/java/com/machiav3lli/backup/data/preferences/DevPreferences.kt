@@ -4,6 +4,9 @@ import com.machiav3lli.backup.NeoApp
 import com.machiav3lli.backup.R
 import com.machiav3lli.backup.data.entity.BooleanPref
 import com.machiav3lli.backup.data.entity.IntPref
+import com.machiav3lli.backup.data.entity.LaunchPref
+import com.machiav3lli.backup.manager.handler.DebugLogHandler
+import com.machiav3lli.backup.utils.SystemUtils
 import com.machiav3lli.backup.utils.TraceUtils
 
 //---------------------------------------- developer settings - logging
@@ -74,6 +77,37 @@ val pref_debugLog = BooleanPref(
     key = "dev-log.debugLog",
     summary = "write detailed debug logs to file (debug.log)",
     defaultValue = false
+)
+
+val pref_debugLogToInternalStorage = BooleanPref(
+    key = "dev-log.debugLogToInternalStorage",
+    summary = "store debug log in app internal directory instead of backup directory (safer, always accessible)",
+    defaultValue = true,
+    enableIf = { pref_debugLog.value }
+)
+
+val pref_shareDebugLog = LaunchPref(
+    key = "dev-log.shareDebugLog",
+    summary = "share debug log file",
+    enableIf = { pref_debugLog.value },
+    onClick = {
+        val debugLogFile = DebugLogHandler.getDebugLogFile()
+        debugLogFile?.let {
+            if (it.exists()) {
+                SystemUtils.share(it, asFile = true)
+            }
+        }
+    }
+)
+
+val pref_clearDebugLog = LaunchPref(
+    key = "dev-log.clearDebugLog",
+    summary = "delete debug log file",
+    enableIf = { pref_debugLog.value },
+    onClick = {
+        val debugLogFile = DebugLogHandler.getDebugLogFile()
+        debugLogFile?.delete()
+    }
 )
 
 //---------------------------------------- developer settings - tracing

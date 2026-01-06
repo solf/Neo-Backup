@@ -16,6 +16,7 @@ import com.machiav3lli.backup.data.preferences.traceDebug
 import com.machiav3lli.backup.manager.handler.LogsHandler.Companion.logException
 import com.machiav3lli.backup.manager.handler.LogsHandler.Companion.unexpectedException
 import com.machiav3lli.backup.manager.handler.ShellCommands
+import com.machiav3lli.backup.manager.handler.debugLog
 import com.machiav3lli.backup.ui.pages.pref_cacheFileLists
 import com.machiav3lli.backup.ui.pages.pref_cacheUris
 import com.machiav3lli.backup.ui.pages.pref_shadowRootFile
@@ -323,20 +324,26 @@ open class StorageFile {
             if (uri.scheme == "direct") {
                 try {
                     val path = uri.path ?: uri.toString().removePrefix("direct://")
+                    debugLog { "Attempting direct:// access: $path" }
                     if (Environment.isExternalStorageManager()) {
                         val regularFile = java.io.File(path)
+                        debugLog { "Direct file check: exists=${regularFile.exists()} canRead=${regularFile.canRead()} canWrite=${regularFile.canWrite()}" }
                         if (regularFile.exists() && regularFile.canRead() && regularFile.canWrite()) {
                             file = RootFile(regularFile)
                             Timber.i("Using direct file access (MANAGE_EXTERNAL_STORAGE): $path")
+                            debugLog { "Direct file access SUCCESS: $path" }
                             cacheSetUri(uri.toString(), this)
                             return
                         } else {
+                            debugLog { "Direct file not accessible: $path" }
                             Timber.w("Direct file access failed for $path - file not accessible")
                         }
                     } else {
+                        debugLog { "MANAGE_EXTERNAL_STORAGE not granted" }
                         Timber.w("Direct scheme used but MANAGE_EXTERNAL_STORAGE not granted")
                     }
                 } catch (e: Throwable) {
+                    debugLog { "Direct file access exception: ${e.javaClass.simpleName}: ${e.message} for $uri" }
                     Timber.e(e, "Failed to use direct file access")
                 }
             }
@@ -629,16 +636,21 @@ open class StorageFile {
 
     fun readText(): String {
         return try {
-            file?.readText()
+            debugLog { "readText: path=$path file=${file?.path} uri=$uri" }
+            val text = file?.readText()
                 ?: run {
                     inputStream()?.reader()?.use {
                         it.readText()
                     } ?: ""
                 }
+            debugLog { "readText success: path=$path length=${text.length}" }
+            text
         } catch (e: FileNotFoundException) {
+            debugLog { "readText FileNotFoundException: path=$path" }
             logException(e, path, backTrace = false)
             ""
         } catch (e: Throwable) {
+            debugLog { "readText error: ${e.javaClass.simpleName}: ${e.message} path=$path" }
             logException(e, path, backTrace = false)
             ""
         }

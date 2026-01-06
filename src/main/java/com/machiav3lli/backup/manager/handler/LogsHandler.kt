@@ -228,7 +228,13 @@ class LogsHandler {
                 else
                     "$whatStr : "
             }
-            Timber.e("$prefix$whatStr\n${message(e, backTrace)}")
+            val logMessage = "$prefix$whatStr\n${message(e, backTrace)}"
+            
+            Timber.e(logMessage)
+            
+            // Also write to debug log
+            debugLog { "logException: $logMessage" }
+            
             if (unhandled && pref_autoLogExceptions.value) {
                 textLog(
                     listOf(
