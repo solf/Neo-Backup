@@ -3,6 +3,7 @@ package com.machiav3lli.backup.data.entity
 import android.content.Context
 import android.database.Cursor
 import android.net.Uri
+import android.os.Environment
 import android.provider.DocumentsContract
 import androidx.core.content.FileProvider
 import androidx.core.database.getLongOrNull
@@ -318,6 +319,28 @@ open class StorageFile {
         this._uri = uri
         name?.let { this.name = it }
         if (parent == null && uri != null) {
+            // Handle direct:// scheme for MANAGE_EXTERNAL_STORAGE access
+            if (uri.scheme == "direct") {
+                try {
+                    val path = uri.path ?: uri.toString().removePrefix("direct://")
+                    if (Environment.isExternalStorageManager()) {
+                        val regularFile = java.io.File(path)
+                        if (regularFile.exists() && regularFile.canRead() && regularFile.canWrite()) {
+                            file = RootFile(regularFile)
+                            Timber.i("Using direct file access (MANAGE_EXTERNAL_STORAGE): $path")
+                            cacheSetUri(uri.toString(), this)
+                            return
+                        } else {
+                            Timber.w("Direct file access failed for $path - file not accessible")
+                        }
+                    } else {
+                        Timber.w("Direct scheme used but MANAGE_EXTERNAL_STORAGE not granted")
+                    }
+                } catch (e: Throwable) {
+                    Timber.e(e, "Failed to use direct file access")
+                }
+            }
+            
             if (pref_shadowRootFile.value && allowShadowing) {
                 try {
                     if (uri.scheme == "file" || uri.scheme == null) {
