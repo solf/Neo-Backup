@@ -4,6 +4,7 @@
 no longer keeps multiple copies of the same unchanged apks, only makes new copy if changed
 - 'Only backup modified' option for scheduled backups -- works via scanning modification date
 in application data folders (up to a specified max depth + hot-path optimization)
+- Added 'direct file access' option for backups directory (direct://...) because SAF is very unreliable for me
 - Various significant bugfixes (stuck notifications, wakelocks not releasing)
 - Changed default settings for schedules to 'actually work' (use foregrounding when executing a schedule)
 - debug log and schedule log (can be enabled in options) to trace what's exactly happening (via files)
