@@ -25,7 +25,9 @@ import androidx.lifecycle.ViewModel
 import timber.log.Timber
 import java.io.File
 
-class DirectoryPickerViewModel : ViewModel() {
+class DirectoryPickerViewModel(
+    initialPath: String? = null
+) : ViewModel() {
     
     var currentPath by mutableStateOf<File?>(null)
         private set
@@ -40,10 +42,19 @@ class DirectoryPickerViewModel : ViewModel() {
         get() = currentPath?.parent != null
     
     init {
-        navigateToDirectory(getStartingPath())
+        navigateToDirectory(getStartingPath(initialPath))
     }
     
-    fun getStartingPath(): File {
+    fun getStartingPath(initialPath: String? = null): File {
+        // Try to use the provided initial path if valid
+        if (initialPath != null) {
+            val initial = File(initialPath)
+            if (initial.exists() && initial.isDirectory && initial.canRead()) {
+                Timber.d("Starting at provided path: $initialPath")
+                return initial
+            }
+        }
+        
         // Try /storage/emulated/0/ first
         val primaryStorage = File("/storage/emulated/0")
         if (primaryStorage.exists() && primaryStorage.canRead()) {

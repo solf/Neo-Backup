@@ -287,13 +287,23 @@ val pref_pathBackupFolder = StringEditPref(
         
         // Custom directory picker
         if (showDirectoryPicker) {
+            val currentPath = try {
+                val configured = backupDirConfigured
+                if (configured.startsWith("direct://")) {
+                    configured.removePrefix("direct://")
+                } else null
+            } catch (e: Exception) {
+                null
+            }
+            
             DirectoryPickerDialog(
                 onDismiss = { showDirectoryPicker = false },
                 onDirectorySelected = { selectedDir ->
                     Timber.i("Selected directory: ${selectedDir.absolutePath}")
                     setBackupDirFromPath(selectedDir.absolutePath)
                     showDirectoryPicker = false
-                }
+                },
+                initialPath = currentPath
             )
         }
     },

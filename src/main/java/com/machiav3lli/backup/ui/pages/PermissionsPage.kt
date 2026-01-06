@@ -87,6 +87,7 @@ import com.machiav3lli.backup.utils.requireCallLogsPermission
 import com.machiav3lli.backup.utils.requireContactsPermission
 import com.machiav3lli.backup.utils.requireSMSMMSPermission
 import com.machiav3lli.backup.utils.requireStorageLocation
+import com.machiav3lli.backup.utils.backupDirConfigured
 import com.machiav3lli.backup.utils.setBackupDir
 import com.machiav3lli.backup.utils.setBackupDirFromPath
 import com.machiav3lli.backup.utils.specialBackupsEnabled
@@ -304,13 +305,23 @@ fun PermissionsPage(powerManager: PowerManager = koinInject()) {
 
     // Custom directory picker
     if (showDirectoryPicker.value) {
+        val currentPath = try {
+            val configured = backupDirConfigured
+            if (configured.startsWith("direct://")) {
+                configured.removePrefix("direct://")
+            } else null
+        } catch (e: Exception) {
+            null
+        }
+        
         DirectoryPickerDialog(
             onDismiss = { showDirectoryPicker.value = false },
             onDirectorySelected = { selectedDir ->
                 Timber.i("Selected directory: ${selectedDir.absolutePath}")
                 setBackupDirFromPath(selectedDir.absolutePath)
                 showDirectoryPicker.value = false
-            }
+            },
+            initialPath = currentPath
         )
     }
     

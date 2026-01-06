@@ -38,6 +38,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -45,7 +46,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.machiav3lli.backup.ui.compose.component.TopBar
 import com.machiav3lli.backup.ui.compose.icons.Phosphor
 import com.machiav3lli.backup.ui.compose.icons.phosphor.ArrowUp
@@ -59,8 +59,11 @@ import java.io.File
 fun DirectoryPickerDialog(
     onDismiss: () -> Unit,
     onDirectorySelected: (File) -> Unit,
-    viewModel: DirectoryPickerViewModel = viewModel()
+    initialPath: String? = null,
 ) {
+    val viewModel: DirectoryPickerViewModel = remember(initialPath) {
+        DirectoryPickerViewModel(initialPath)
+    }
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
